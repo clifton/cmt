@@ -2,9 +2,8 @@ name: Test Install Script
 
 on:
   push:
-    paths:
-      - 'scripts/install.sh'
-      - '.github/workflows/test-install.yml'
+    branches:
+      - main
   pull_request:
     paths:
       - 'scripts/install.sh'
@@ -15,18 +14,13 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
-        include:
-          - os: ubuntu-latest
-            shell: bash
-          - os: macos-latest
-            shell: bash
 
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
 
       - name: Test install script
-        shell: ${{ matrix.shell }}
+        shell: bash
         run: |
           # First ensure the script is executable
           chmod +x ./scripts/install.sh
@@ -39,7 +33,7 @@ jobs:
           cmt --version
 
       - name: Test install script via curl
-        shell: ${{ matrix.shell }}
+        shell: bash
         run: |
           # Remove previous installation
           sudo rm -f $(which cmt)

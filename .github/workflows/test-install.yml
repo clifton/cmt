@@ -1,7 +1,10 @@
-name: Test Install Script
+name: Install Script
 
 on:
-  push:
+  workflow_run:
+    workflows: ["Release"]
+    types:
+      - completed
     branches:
       - main
   pull_request:
@@ -11,75 +14,55 @@ on:
 
 jobs:
   test-install:
-    strategy:
-      matrix:
-        os: [ubuntu-latest, macos-latest]
-
+    if: ${{ github.event_name == 'pull_request' || github.event.workflow_run.conclusion == 'success' }}
+    name: Test Install Script
     runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            shell: bash
+            sudo: sudo
+            install_dir: /usr/local/bin
+          - os: macos-latest
+            shell: bash
+            sudo: sudo
+            install_dir: /usr/local/bin
+          - os: windows-latest
+            shell: msys2 {0}
+            sudo: ""
+            install_dir: /mingw64/bin
 
-      - name: Test install script
-        shell: bash
-        run: |
-          # First ensure the script is executable
-          chmod +x ./scripts/install.sh
-
-          # Run the script
-          ./scripts/install.sh
-
-          # Verify cmt is installed and executable
-          which cmt
-          cmt --version
-
-      - name: Test install script via curl
-        shell: bash
-        run: |
-          # Remove previous installation
-          sudo rm -f $(which cmt)
-
-          # Test the curl installation method
-          curl -sSL https://raw.githubusercontent.com/cliftonk/cmt/main/scripts/install.sh | sh
-
-          # Verify cmt is installed and executable
-          which cmt
-          cmt --version
-
-  test-install-windows:
-    runs-on: windows-latest
     defaults:
       run:
-        shell: msys2 {0}
+        shell: ${{ matrix.shell }}
+
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup MSYS2
+        if: matrix.os == 'windows-latest'
         uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
           update: true
           install: curl
 
-      - name: Test install script
+      - name: Test installation
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INSTALL_DIR: ${{ matrix.install_dir }}
         run: |
-          # First ensure the script is executable
+          # Test local install
           chmod +x ./scripts/install.sh
-
-          # Run the script
           ./scripts/install.sh
-
-          # Verify cmt is installed and executable
           which cmt
           cmt --version
 
-      - name: Test install script via curl
-        run: |
-          # Remove previous installation
-          rm -f $(which cmt)
-
-          # Test the curl installation method
-          curl -sSL https://raw.githubusercontent.com/cliftonk/cmt/main/scripts/install.sh | sh
-
-          # Verify cmt is installed and executable
+          # Test remote install
+          ${{ matrix.sudo }} rm -f $(which cmt)
+          export BRANCH="${{ github.event_name == 'pull_request' && github.head_ref || 'main' }}"
+          curl -sSL "https://raw.githubusercontent.com/clifton/cmt/${BRANCH}/scripts/install.sh" | sh
           which cmt
           cmt --version

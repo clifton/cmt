@@ -21,7 +21,7 @@
 The easiest way to install `cmt` is using our install script:
 
 ```bash
-curl -sSL https://raw.githubusercontent.com/cliftonk/cmt/main/scripts/install.sh | sh
+curl -sSL https://raw.githubusercontent.com/clifton/cmt/main/scripts/install.sh | sh
 ```
 
 This will automatically download and install the latest version for your platform.
@@ -40,7 +40,7 @@ Alternatively, you can build from source:
 
 ```bash
 # Clone the repository
-git clone https://github.com/cliftonk/cmt.git
+git clone https://github.com/clifton/cmt.git
 cd cmt
 
 # Build and install

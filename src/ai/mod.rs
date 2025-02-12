@@ -69,22 +69,17 @@ mod tests {
         args.hint = Some(hint.to_string());
 
         let changes = "test changes";
-        let user_prompt = USER_PROMPT_TEMPLATE.replace("{}", changes);
         let expected_system_prompt = format!("{}\n\nAdditional context: {}", SYSTEM_PROMPT, hint);
 
-        // Create a mock provider to verify the system prompt
-        let mock_complete = |_model: &str,
-                             _temperature: f32,
-                             system_prompt: &str,
-                             _user_prompt: &str|
-         -> Result<String, Box<dyn Error>> {
-            assert_eq!(system_prompt, expected_system_prompt);
-            Ok("test commit message".to_string())
-        };
+        let result = MockProvider::complete(
+            "test-model",
+            0.3,
+            &expected_system_prompt,
+            &USER_PROMPT_TEMPLATE.replace("{}", changes),
+        );
 
-        // Test both providers
-        let result = mock_complete("test-model", 0.3, &expected_system_prompt, &user_prompt);
         assert!(result.is_ok());
+        assert_eq!(result.unwrap(), expected_system_prompt);
     }
 
     #[test]

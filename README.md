@@ -1,6 +1,6 @@
 # cmt - AI-Powered Git Commit Message Generator
 
-`cmt` is a command-line tool that generates meaningful git commit messages using AI models (Anthropic Claude or OpenAI GPT). It analyzes your staged changes and generates a well-formatted, descriptive commit message following conventional commit standards.
+`cmt` is a command-line tool that generates meaningful git commit messages using AI models. It analyzes your staged changes and generates a well-formatted, descriptive commit message following conventional commit standards.
 
 ## Features
 

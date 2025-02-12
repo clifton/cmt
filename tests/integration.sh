@@ -18,11 +18,16 @@ test_provider() {
         echo -e "\n🤖 Testing $provider..."
     fi
 
-    # Create and stage a test file
-    echo "Test content for $provider" > "test_${provider}.txt"
-    git add "test_${provider}.txt"
+    # Create and stage a test file with meaningful content
+    local test_file="test_${provider}.txt"
+    echo "Feature: User Authentication
+- Add login form component
+- Implement password validation
+- Add error handling for invalid credentials" > "$test_file"
+    git add "$test_file"
 
     # Generate commit message
+    local message
     if [ -n "$hint" ]; then
         message=$("$CMT_BIN" --message-only $provider_flag --hint "$hint")
     else
@@ -33,22 +38,25 @@ test_provider() {
     echo "$message"
 
     # Verify conventional commit format
-    echo "$message" | grep -q "^[a-z]\+: .*$" || {
+    if ! echo "$message" | grep -q "^[a-z]\+: .*$"; then
         echo "❌ Failed: Message doesn't follow conventional commit format"
+        echo "Message was: $message"
         exit 1
-    }
+    fi
 
     # Make the commit
     git commit -F <(echo "$message")
+    local commit_msg
     commit_msg=$(git log -1 --pretty=%B)
     echo "Commit message:"
     echo "$commit_msg"
 
     # Verify the commit message
-    git log -1 --pretty=%B | grep -q "^[a-z]\+: .*$" || {
+    if ! echo "$commit_msg" | grep -q "^[a-z]\+: .*$"; then
         echo "❌ Failed: Commit message doesn't follow conventional format"
+        echo "Message was: $commit_msg"
         exit 1
-    }
+    fi
 
     echo "✓ $provider test successful"
 }
@@ -62,10 +70,18 @@ echo "🔍 Setting up test repository..."
 mkdir -p test-repo
 cd test-repo
 git init
+git config --local user.email "test@example.com"
+git config --local user.name "Test User"
 echo "✓ Git repository initialized"
 
 echo -e "\n📊 Testing diff display..."
-echo "Initial content" > test.txt
+echo "# Authentication Service
+This component handles user authentication and session management.
+
+## Features
+- Login functionality
+- Password validation
+- Session handling" > test.txt
 git add test.txt
 "$CMT_BIN" --show-diff
 # Verify diff output contains our file

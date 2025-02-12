@@ -80,3 +80,4 @@ jobs:
           files: ${{ matrix.asset_name }}
           draft: false
           prerelease: false
+          make_latest: true

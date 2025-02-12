@@ -1,3 +1,6 @@
+use anthropic::types::MessagesRequest;
+use anthropic::types::{ContentBlock, Message, Role};
+use anthropic::{client::Client as Anthropic, config::AnthropicConfig};
 use clap::Parser;
 use colored::*;
 use dotenv::dotenv;
@@ -6,7 +9,13 @@ use reqwest::blocking::Client;
 use serde_json::{json, Value};
 use std::{env, process};
 
-/// A CLI tool that generates commit messages using OpenAI
+mod prompts;
+use prompts::{SYSTEM_PROMPT, USER_PROMPT_TEMPLATE};
+
+const CLAUDE_DEFAULT_TEMP: f32 = 0.3;
+const OPENAI_DEFAULT_TEMP: f32 = 1.0;
+
+/// A CLI tool that generates commit messages using AI
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
@@ -18,24 +27,28 @@ struct Args {
     #[arg(short, long)]
     show_diff: bool,
 
-    /// Use a different OpenAI model (default: gpt-4o)
-    #[arg(long, default_value = "gpt-4o")]
-    model: String,
+    /// Use a specific AI model (defaults to claude-3.5-sonnet-latest or gpt-4o depending on provider)
+    #[arg(long)]
+    model: Option<String>,
+
+    /// Use OpenAI instead of Claude (which is default)
+    #[arg(long, default_value_t = false)]
+    openai: bool,
+
+    /// Use Anthropic instead of OpenAI (which is default)
+    #[arg(long, default_value_t = true)]
+    anthropic: bool,
 
     /// Adjust the creativity of the generated message (0.0 to 2.0)
-    #[arg(short, long, default_value_t = 1.0)]
-    temperature: f32,
+    #[arg(short, long)]
+    temperature: Option<f32>,
 }
 
 /// Check if we're running via `cargo run`
 fn is_cargo_run() -> bool {
-    env::current_exe()
-        .ok()
-        .and_then(|path| {
-            path.file_name()
-                .map(|name| name.to_string_lossy().into_owned())
-        })
-        .map(|name| name.contains("cmt-"))
+    std::env::args()
+        .next()
+        .map(|arg| arg.contains("target/debug/") || arg.contains("target/release/"))
         .unwrap_or(false)
 }
 
@@ -75,60 +88,73 @@ fn get_staged_changes(repo: &Repository) -> String {
     changes.join("\n")
 }
 
-fn generate_commit_message(
+async fn generate_commit_message_claude(
     changes: &str,
     args: &Args,
 ) -> Result<String, Box<dyn std::error::Error>> {
-    if changes.is_empty() {
-        return Ok(String::from("No staged changes found"));
-    }
+    let api_key = env::var("ANTHROPIC_API_KEY").expect("ANTHROPIC_API_KEY must be set");
+    let mut anthropic_config = AnthropicConfig::default();
+    anthropic_config.api_key = api_key;
+    let client = Anthropic::try_from(anthropic_config)?;
 
+    let model = args
+        .model
+        .clone()
+        .unwrap_or_else(|| "claude-3-5-sonnet-latest".to_string());
+
+    let user_prompt = USER_PROMPT_TEMPLATE.replace("{}", changes);
+
+    let message = Message {
+        role: Role::User,
+        content: vec![ContentBlock::Text { text: user_prompt }],
+    };
+
+    let response = client
+        .messages(MessagesRequest {
+            model,
+            max_tokens: 100,
+            temperature: Some(args.temperature.unwrap_or(CLAUDE_DEFAULT_TEMP) as f64),
+            system: SYSTEM_PROMPT.to_string(),
+            messages: vec![message],
+            ..Default::default()
+        })
+        .await?;
+    let content = response.content.first().unwrap();
+    let text = match content {
+        ContentBlock::Text { text } => text.clone(),
+        _ => String::from("Received unexpected content block type from Claude API"),
+    };
+
+    Ok(text)
+}
+
+fn generate_commit_message_openai(
+    changes: &str,
+    args: &Args,
+) -> Result<String, Box<dyn std::error::Error>> {
     let api_key = env::var("OPENAI_API_KEY").expect("OPENAI_API_KEY must be set");
     let client = Client::new();
 
-    let prompt = format!(
-        "Generate a concise and descriptive git commit message for the following changes:\n\n{}\n\n\
-        The commit message should be in the present tense, be specific but concise, and follow best practices. \
-        Format the response as a commit message without quotes or prefixes.",
-        changes
-    );
+    let model = args.model.clone().unwrap_or_else(|| "gpt-4o".to_string());
+    let user_prompt = USER_PROMPT_TEMPLATE.replace("{}", changes);
 
     let response = client
         .post("https://api.openai.com/v1/chat/completions")
         .header("Authorization", format!("Bearer {}", api_key))
         .header("Content-Type", "application/json")
         .json(&json!({
-            "model": args.model,
+            "model": model,
             "messages": [
                 {
                     "role": "system",
-                    "content": "Generate git commit messages based on git diff output according to the standard commit specification.
-
-You must return only the commit message without any other text or quotes.
-Ignore changes to lock files. Be very succinct.
-
-Format of the Commit Message:
-{type}: {subject}
-
-Also include a list in markdown format of more detailed changes, max line length of 80 characters, with two newlines between the message.
-
-Allowed Types:
-- feat
-- fix
-- docs
-- style
-- refactor
-- test
-- chore
-
-You are a helpful assistant that generates clear and concise git commit messages."
+                    "content": SYSTEM_PROMPT
                 },
                 {
                     "role": "user",
-                    "content": prompt
+                    "content": user_prompt
                 }
             ],
-            "temperature": args.temperature,
+            "temperature": args.temperature.unwrap_or(OPENAI_DEFAULT_TEMP),
             "max_tokens": 100
         }))
         .send()?;
@@ -141,6 +167,21 @@ You are a helpful assistant that generates clear and concise git commit messages
         .to_string();
 
     Ok(message)
+}
+
+fn generate_commit_message(
+    changes: &str,
+    args: &Args,
+) -> Result<String, Box<dyn std::error::Error>> {
+    if changes.is_empty() {
+        return Ok(String::from("No staged changes found"));
+    }
+
+    if args.openai {
+        generate_commit_message_openai(changes, args)
+    } else {
+        tokio::runtime::Runtime::new()?.block_on(generate_commit_message_claude(changes, args))
+    }
 }
 
 fn show_git_diff(repo: &Repository) -> Result<(), Box<dyn std::error::Error>> {

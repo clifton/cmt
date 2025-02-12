@@ -1,0 +1,5 @@
+Generate a concise and descriptive git commit message for the following changes:
+
+{}
+
+The commit message should be in the present tense, be specific but concise, and follow best practices. Format the response as a commit message without quotes or prefixes.

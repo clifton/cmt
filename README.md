@@ -1,22 +1,24 @@
 # cmt - AI-Powered Git Commit Message Generator
 
-`cmt` is a command-line tool that generates meaningful git commit messages using OpenAI's GPT models. It analyzes your staged changes and generates a well-formatted, descriptive commit message following conventional commit standards.
+`cmt` is a command-line tool that generates meaningful git commit messages using AI models (Anthropic Claude or OpenAI GPT). It analyzes your staged changes and generates a well-formatted, descriptive commit message following conventional commit standards.
 
 ## Features
 
-- 🤖 Uses OpenAI's GPT models to generate contextual commit messages
+- 🤖 Supports multiple AI models:
+  - Anthropic's Claude 3.5 Sonnet (default, temperature 0.3)
+  - OpenAI's GPT-4 Optimized (temperature 1.0)
 - 📝 Follows conventional commit format (`type: subject`)
 - 🎨 Beautiful colored output in interactive mode
 - 📊 Optional diff statistics
 - ⚙️ Configurable AI model and parameters
-- 🔑 Supports environment variables for API key management
+- 🔑 Supports environment variables for API keys
 
 ## Installation
 
 ### Prerequisites
 
 - Rust and Cargo (install from [rustup.rs](https://rustup.rs))
-- An OpenAI API key
+- An Anthropic API key and/or OpenAI API key
 
 ### Installing from crates.io
 
@@ -41,13 +43,18 @@ cargo install --path .
 
 ### Configuration
 
-Set your OpenAI API key either:
-1. As an environment variable:
+Set your API key(s) either:
+1. As environment variables:
    ```bash
+   # For Claude (default)
+   export ANTHROPIC_API_KEY='your-api-key'
+
+   # For OpenAI (optional)
    export OPENAI_API_KEY='your-api-key'
    ```
 2. Or in a `.env` file in your project directory:
    ```
+   ANTHROPIC_API_KEY=your-api-key
    OPENAI_API_KEY=your-api-key
    ```
 
@@ -59,8 +66,11 @@ Set your OpenAI API key either:
 # Stage your changes first
 git add .
 
-# Generate a commit message
+# Generate a commit message using Claude (default)
 cmt
+
+# Generate a commit message using OpenAI
+cmt --openai
 
 # Use the generated message directly with git
 git commit -F <(cmt --message-only)
@@ -74,8 +84,10 @@ Usage: cmt [OPTIONS]
 Options:
   -m, --message-only        Only output the generated message, without formatting
   -s, --show-diff          Show the diff statistics
-      --model <MODEL>      Use a different OpenAI model [default: gpt-4o]
-  -t, --temperature <TEMP> Adjust the creativity of the message (0.0 to 2.0) [default: 1.0]
+      --model <MODEL>      Use a specific AI model (defaults to claude-3.5-sonnet-latest or gpt-4o)
+      --openai            Use OpenAI instead of Claude (which is default)
+  -t, --temperature <TEMP> Adjust the creativity of the message (0.0 to 2.0)
+                          [default: 0.3 for Claude, 1.0 for OpenAI]
   -h, --help              Show this help message
   -V, --version           Show version information
 ```
@@ -86,8 +98,15 @@ Options:
 # Show diff statistics along with the message
 cmt --show-diff
 
-# Use a different model with lower creativity
-cmt --model gpt-3.5-turbo --temperature 0.5
+# Use OpenAI with a specific model
+cmt --openai --model gpt-4
+
+# Use Claude with a specific model
+cmt --model claude-3-opus-20240229
+
+# Override default temperature
+cmt --temperature 0.7
+cmt --openai --temperature 0.5
 
 # Generate just the message (useful for scripts)
 cmt --message-only

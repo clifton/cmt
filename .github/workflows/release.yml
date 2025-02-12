@@ -39,19 +39,21 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Generate Release Description
-        if: matrix.os == 'ubuntu-latest' && matrix.target == 'x86_64-unknown-linux-gnu'
-        id: release_description
-        run: |
-          PREV_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-          if [ -n "$PREV_TAG" ]; then
-            CHANGES=$(git log --pretty=format:"- %s" $PREV_TAG..HEAD)
-          else
-            CHANGES=$(git log --pretty=format:"- %s")
-          fi
-          echo "changes<<EOF" >> $GITHUB_OUTPUT
-          echo "$CHANGES" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+      - name: Build Changelog
+        id: build_changelog
+        uses: mikepenz/release-changelog-builder-action@v5
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          configurationJson: |
+            {
+              "template": "# Changelog\n\n#{{CHANGELOG}}\n\n<details>\n<summary>Uncategorized</summary>\n\n#{{UNCATEGORIZED}}\n</details>",
+              "categories": [
+                { "title": "## 🚀 Features", "labels": ["feature", "enhancement"] },
+                { "title": "## 🐛 Bug Fixes", "labels": ["bug", "fix"] },
+                { "title": "## 📦 Dependencies", "labels": ["dependencies"] }
+              ]
+            }
 
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
@@ -78,12 +80,10 @@ jobs:
           fi
 
       - name: Upload binaries to release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v2
         with:
+          body: ${{ steps.build_changelog.outputs.changelog }}
+          generate_release_notes: false
           files: ${{ matrix.asset_name }}
           draft: false
           prerelease: false
-          generate_release_notes: false
-          body: |
-            Changes in this release:
-            ${{ steps.release_description.outputs.changes }}

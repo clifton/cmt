@@ -8,7 +8,6 @@
   - Anthropic's Claude 3.5 Sonnet (default, temperature 0.3)
   - OpenAI's GPT-4 Optimized (temperature 1.0)
 - 📝 Follows conventional commit format (`type: subject`)
-- 🎨 Beautiful colored output in interactive mode
 - 📊 Optional diff statistics
 - 💡 Contextual hints to guide message generation
 - ⚙️ Configurable AI model and parameters
@@ -167,23 +166,10 @@ cargo test
 cargo run
 ```
 
-### Dependencies
-
-- `git2`: Git operations
-- `reqwest`: HTTP client for OpenAI API
-- `clap`: Command-line argument parsing
-- `colored`: Terminal colors
-- `serde`: JSON serialization
-- `dotenv`: Environment variable management
-
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
+Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
-
-Staged Changes:
-1 file changed, 29 insertions(+), 18 deletions(-)
-README.md | +++++++++++++++++++++++++++++------------------

@@ -10,6 +10,7 @@
 - 📝 Follows conventional commit format (`type: subject`)
 - 🎨 Beautiful colored output in interactive mode
 - 📊 Optional diff statistics
+- 💡 Contextual hints to guide message generation
 - ⚙️ Configurable AI model and parameters
 - 🔑 Supports environment variables for API keys
 
@@ -82,14 +83,15 @@ git commit -F <(cmt --message-only)
 Usage: cmt [OPTIONS]
 
 Options:
-  -m, --message-only        Only output the generated message, without formatting
-  -s, --show-diff          Show the diff statistics
-      --model <MODEL>      Use a specific AI model (defaults to claude-3.5-sonnet-latest or gpt-4o)
-      --openai            Use OpenAI instead of Claude (which is default)
-  -t, --temperature <TEMP> Adjust the creativity of the message (0.0 to 2.0)
-                          [default: 0.3 for Claude, 1.0 for OpenAI]
-  -h, --help              Show this help message
-  -V, --version           Show version information
+  -m, --message-only               Only output the generated commit message, without formatting
+  -s, --show-diff                  Show the diff of staged changes
+      --model <MODEL>              Use a specific AI model (defaults to claude-3-5-sonnet-latest or gpt-4o depending on provider)
+      --openai                     Use OpenAI instead of Claude (which is default)
+      --anthropic                  Use Anthropic instead of OpenAI (which is default)
+  -t, --temperature <TEMPERATURE>  Adjust the creativity of the generated message (0.0 to 2.0)
+      --hint <HINT>                Add a hint to guide the AI in generating the commit message
+  -h, --help                       Print help
+  -V, --version                    Print version
 ```
 
 ### Examples
@@ -98,19 +100,28 @@ Options:
 # Show diff statistics along with the message
 cmt --show-diff
 
-# Use OpenAI with a specific model
-cmt --openai --model gpt-4
+# Use OpenAI with a custom temperature
+cmt --openai --temperature 0.8
 
-# Use Claude with a specific model
-cmt --model claude-3-opus-20240229
+# Provide a hint for context
+cmt --hint "This fixes the login timeout issue"
 
-# Override default temperature
-cmt --temperature 0.7
-cmt --openai --temperature 0.5
+# Combine multiple options
+cmt --openai --model gpt-4 --hint "Update dependencies for security" --show-diff
 
-# Generate just the message (useful for scripts)
-cmt --message-only
+# Use with git commit directly
+git commit -F <(cmt --message-only --hint "Refactor to improve performance")
 ```
+
+## How It Works
+
+1. When you run `cmt`, it analyzes your staged git changes
+2. The changes are sent to the selected AI model (Claude or OpenAI) along with:
+   - A system prompt that guides the model to generate conventional commits
+   - Your optional hint for additional context
+   - The staged changes as the user prompt
+3. The AI generates a commit message following the conventional commit format
+4. The message is displayed (with optional diff statistics) or output directly for use with git
 
 ## Commit Message Format
 
@@ -162,8 +173,12 @@ cargo run
 
 ## Contributing
 
-Contributions are welcome! Please feel free to submit a Pull Request.
+Contributions are welcome! Please feel free to submit a Pull Request. For major changes, please open an issue first to discuss what you would like to change.
 
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+
+Staged Changes:
+1 file changed, 29 insertions(+), 18 deletions(-)
+README.md | +++++++++++++++++++++++++++++------------------

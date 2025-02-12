@@ -39,13 +39,92 @@ pub fn get_staged_changes(repo: &Repository) -> Result<String, GitError> {
     }
 }
 
-pub fn show_git_diff(repo: &Repository) -> Result<(), Box<dyn std::error::Error>> {
+fn has_unstaged_changes(repo: &Repository) -> Result<bool, GitError> {
     let diff = repo.diff_index_to_workdir(None, None)?;
+    Ok(diff.stats()?.files_changed() > 0)
+}
+
+pub fn show_git_diff(repo: &Repository) -> Result<(), Box<dyn std::error::Error>> {
+    let mut opts = git2::DiffOptions::new();
+    let tree = match repo.head().and_then(|head| head.peel_to_tree()) {
+        Ok(tree) => tree,
+        Err(_) => {
+            // If there's no HEAD (new repo), use an empty tree
+            repo.treebuilder(None)
+                .and_then(|builder| builder.write())
+                .and_then(|oid| repo.find_tree(oid))
+                .map_err(|e| GitError::from_str(&format!("Failed to create empty tree: {}", e)))?
+        }
+    };
+
+    let diff = repo
+        .diff_tree_to_index(Some(&tree), None, Some(&mut opts))
+        .map_err(|e| GitError::from_str(&format!("Failed to get repository diff: {}", e)))?;
+
     let stats = diff.stats()?;
-    println!("\n{}", "Diff Statistics:".blue().bold());
-    println!("Files changed: {}", stats.files_changed());
-    println!("Insertions: {}", stats.insertions());
-    println!("Deletions: {}", stats.deletions());
+
+    println!("\n{}", "Staged Changes:".blue().bold());
+
+    // Print the summary with colors
+    let insertions = stats.insertions();
+    let deletions = stats.deletions();
+    println!(
+        "{} file{} changed, {} insertion{}, {} deletion{}",
+        stats.files_changed(),
+        if stats.files_changed() == 1 { "" } else { "s" },
+        format!(
+            "{}{}",
+            insertions,
+            if insertions == 1 { "(+)" } else { "(+)" }
+        )
+        .green(),
+        if insertions == 1 { "" } else { "s" },
+        format!(
+            "{}{}",
+            deletions,
+            if deletions == 1 { "(-)" } else { "(-)" }
+        )
+        .red(),
+        if deletions == 1 { "" } else { "s" }
+    );
+
+    // Print the per-file changes with visualization
+    let mut format_opts = git2::DiffStatsFormat::empty();
+    format_opts.insert(git2::DiffStatsFormat::FULL);
+    format_opts.insert(git2::DiffStatsFormat::INCLUDE_SUMMARY);
+    let changes_buf = stats.to_buf(format_opts, 80)?;
+
+    let changes_str = String::from_utf8_lossy(&changes_buf);
+    for line in changes_str.lines() {
+        if line.contains('|') {
+            let parts: Vec<&str> = line.splitn(2, '|').collect();
+            if parts.len() == 2 {
+                let (file, changes) = (parts[0].trim(), parts[1].trim());
+                let count = changes.chars().filter(|&c| c == '+' || c == '-').count();
+                println!(
+                    "{} | {} {}{}",
+                    file,
+                    count,
+                    changes.green(),
+                    "-".repeat(47_usize.saturating_sub(count))
+                );
+            }
+        }
+    }
+
+    // Check for unstaged changes and warn the user
+    if has_unstaged_changes(repo)? {
+        println!("\n{}", "Warning:".yellow().bold());
+        println!(
+            "{}",
+            "You have unstaged changes that won't be included in this commit.".yellow()
+        );
+        println!(
+            "{}",
+            "Use 'git add' to stage changes you want to include.".yellow()
+        );
+    }
+
     Ok(())
 }
 
@@ -133,19 +212,42 @@ mod tests {
     }
 
     #[test]
-    fn test_show_git_diff() {
+    fn test_has_unstaged_changes() {
         let (_temp_dir, repo) = setup_test_repo();
 
-        // Create initial file
+        // Initially should have no unstaged changes
+        assert!(!has_unstaged_changes(&repo).unwrap());
+
+        // Create and stage a file first
         create_and_stage_file(&repo, "test.txt", "Initial content");
         commit_all(&repo, "Initial commit");
 
-        // Modify the file but don't stage it
+        // Modify the file without staging it
         let path = repo.workdir().unwrap().join("test.txt");
         let mut file = File::create(path).unwrap();
         writeln!(file, "Modified content").unwrap();
 
-        // Capture stdout to verify the output
+        // Should now detect unstaged changes
+        assert!(has_unstaged_changes(&repo).unwrap());
+    }
+
+    #[test]
+    fn test_show_git_diff_with_unstaged_changes() {
+        let (_temp_dir, repo) = setup_test_repo();
+
+        // Create and stage a file
+        create_and_stage_file(&repo, "staged.txt", "Staged content");
+        commit_all(&repo, "Initial commit");
+
+        // Modify the file without staging changes
+        let path = repo.workdir().unwrap().join("staged.txt");
+        let mut file = File::create(path).unwrap();
+        writeln!(file, "Modified unstaged content").unwrap();
+
+        // Create another staged file
+        create_and_stage_file(&repo, "new-staged.txt", "New staged content");
+
+        // Should succeed and include warning about unstaged changes
         let result = show_git_diff(&repo);
         assert!(result.is_ok());
     }

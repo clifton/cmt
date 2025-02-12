@@ -65,7 +65,26 @@ fn generate_commit_message(changes: &str) -> Result<String, Box<dyn std::error::
             "messages": [
                 {
                     "role": "system",
-                    "content": "You are a helpful assistant that generates clear and concise git commit messages."
+                    "content": "Generate git commit messages based on git diff output according to the standard commit specification.
+
+You must return only the commit message without any other text or quotes.
+Ignore changes to lock files. Be very succinct.
+
+Format of the Commit Message:
+{type}: {subject}
+
+Also include a list in markdown format of more detailed changes, max line length of 80 characters, with two newlines between the message.
+
+Allowed Types:
+- feat
+- fix
+- docs
+- style
+- refactor
+- test
+- chore
+
+You are a helpful assistant that generates clear and concise git commit messages."
                 },
                 {
                     "role": "user",
@@ -109,18 +128,24 @@ fn main() {
 
     match generate_commit_message(&staged_changes) {
         Ok(commit_message) => {
-            println!("{}", "\nStaged changes:".blue().bold());
-            println!("{}", "-".repeat(30));
-            println!("{}", staged_changes);
-            println!("{}", "-".repeat(30));
+            if std::env::args().len() > 1 && std::env::args().nth(1).unwrap() == "--message-only" {
+                // When used with git commit -F, only output the message
+                print!("{}", commit_message);
+            } else {
+                // Interactive mode - show full formatted output
+                println!("{}", "\nStaged changes:".blue().bold());
+                println!("{}", "-".repeat(30));
+                println!("{}", staged_changes);
+                println!("{}", "-".repeat(30));
 
-            println!("\n{}", "Generated commit message:".green().bold());
-            println!("{}", "-".repeat(30));
-            println!("{}", commit_message);
-            println!("{}", "-".repeat(30));
+                println!("\n{}", "Generated commit message:".green().bold());
+                println!("{}", "-".repeat(30));
+                println!("{}", commit_message);
+                println!("{}", "-".repeat(30));
 
-            println!("\nTo use this message, run:");
-            println!("git commit -F <(cargo run)");
+                println!("\nTo use this message, run:");
+                println!("git commit -F <(cargo run --quiet --message-only)");
+            }
         }
         Err(e) => {
             eprintln!("{}", "Error generating commit message:".red().bold());

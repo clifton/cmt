@@ -13,8 +13,10 @@ on:
       - '.github/workflows/test-install.yml'
 
 jobs:
-  test:
+  test-install:
     if: ${{ github.event_name == 'pull_request' || github.event.workflow_run.conclusion == 'success' }}
+    name: Test Install Script
+    runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
       matrix:
@@ -32,8 +34,6 @@ jobs:
             sudo: ""
             install_dir: /mingw64/bin
 
-    name: Test on ${{ matrix.os }}
-    runs-on: ${{ matrix.os }}
     defaults:
       run:
         shell: ${{ matrix.shell }}
@@ -49,21 +49,18 @@ jobs:
           update: true
           install: curl
 
-      - name: Test local install
+      - name: Test installation
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           INSTALL_DIR: ${{ matrix.install_dir }}
         run: |
+          # Test local install
           chmod +x ./scripts/install.sh
           ./scripts/install.sh
           which cmt
           cmt --version
 
-      - name: Test remote install
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          INSTALL_DIR: ${{ matrix.install_dir }}
-        run: |
+          # Test remote install
           ${{ matrix.sudo }} rm -f $(which cmt)
           export BRANCH="${{ github.event_name == 'pull_request' && github.head_ref || 'main' }}"
           curl -sSL "https://raw.githubusercontent.com/clifton/cmt/${BRANCH}/scripts/install.sh" | sh

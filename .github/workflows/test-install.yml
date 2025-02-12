@@ -1,7 +1,10 @@
 name: Test Install Script
 
 on:
-  push:
+  workflow_run:
+    workflows: ["Release"]
+    types:
+      - completed
     branches:
       - main
   pull_request:
@@ -11,6 +14,8 @@ on:
 
 jobs:
   test-install:
+    # Only check workflow success on workflow_run events
+    if: ${{ github.event_name == 'pull_request' || github.event.workflow_run.conclusion == 'success' }}
     strategy:
       matrix:
         os: [ubuntu-latest, macos-latest]
@@ -38,14 +43,19 @@ jobs:
           # Remove previous installation
           sudo rm -f $(which cmt)
 
+          # Set branch based on event type
+          export BRANCH="${{ github.event_name == 'pull_request' && github.head_ref || 'main' }}"
+
           # Test the curl installation method
-          curl -sSL https://raw.githubusercontent.com/cliftonk/cmt/main/scripts/install.sh | sh
+          curl -sSL "https://raw.githubusercontent.com/cliftonk/cmt/${BRANCH}/scripts/install.sh" | sh
 
           # Verify cmt is installed and executable
           which cmt
           cmt --version
 
   test-install-windows:
+    # Only check workflow success on workflow_run events
+    if: ${{ github.event_name == 'pull_request' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: windows-latest
     defaults:
       run:
@@ -77,8 +87,11 @@ jobs:
           # Remove previous installation
           rm -f $(which cmt)
 
+          # Set branch based on event type
+          BRANCH="${{ github.event_name == 'pull_request' && github.head_ref || 'main' }}"
+
           # Test the curl installation method
-          curl -sSL https://raw.githubusercontent.com/cliftonk/cmt/main/scripts/install.sh | sh
+          curl -sSL "https://raw.githubusercontent.com/cliftonk/cmt/${BRANCH}/scripts/install.sh" | sh
 
           # Verify cmt is installed and executable
           which cmt

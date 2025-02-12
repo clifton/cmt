@@ -40,11 +40,19 @@ else
     BINARY="cmt-${PLATFORM}-${ARCH}"
 fi
 
-# Get latest version
-LATEST_VERSION=$(curl -sL https://api.github.com/repos/cliftonk/cmt/releases/latest | grep '"tag_name":' | cut -d'"' -f4)
+# Get latest version with debug output
+echo "Fetching latest release information..."
+GITHUB_API_RESPONSE=$(curl -sL https://api.github.com/repos/cliftonk/cmt/releases/latest)
+if [ -z "$GITHUB_API_RESPONSE" ]; then
+    echo "Error: Empty response from GitHub API"
+    exit 1
+fi
+
+echo "API Response: $GITHUB_API_RESPONSE"
+LATEST_VERSION=$(echo "$GITHUB_API_RESPONSE" | grep '"tag_name":' | cut -d'"' -f4)
 
 if [ -z "$LATEST_VERSION" ]; then
-    echo "Failed to fetch latest version"
+    echo "Error: Could not parse version from GitHub API response"
     exit 1
 fi
 

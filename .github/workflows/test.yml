@@ -24,7 +24,7 @@ jobs:
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: "integration-test"
+          shared-key: "cmt-test"
           cache-directories: |
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
@@ -32,4 +32,4 @@ jobs:
             target/
 
       - name: Run tests
-        run: cargo test --verbose
+        run: cargo test --no-fail-fast -- --test-threads=1

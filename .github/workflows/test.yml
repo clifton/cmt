@@ -12,8 +12,7 @@ env:
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
 jobs:
-  integration:
-    name: Integration test
+  test:
     runs-on: ubuntu-latest
     container:
       image: rust:latest

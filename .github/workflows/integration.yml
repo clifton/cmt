@@ -13,7 +13,6 @@ env:
 
 jobs:
   integration:
-    name: Integration test
     runs-on: ubuntu-latest
     container:
       image: rust:latest

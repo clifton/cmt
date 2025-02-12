@@ -1,6 +1,9 @@
 #!/bin/bash
 set -e  # Exit on any error
 
+# Store the path to the binary
+CMT_BIN="$(pwd)/target/debug/cmt"
+
 # Function to test commit message generation with a specific provider
 test_provider() {
     local provider=$1
@@ -21,9 +24,9 @@ test_provider() {
 
     # Generate commit message
     if [ -n "$hint" ]; then
-        message=$(../target/debug/cmt --message-only $provider_flag --hint "$hint")
+        message=$("$CMT_BIN" --message-only $provider_flag --hint "$hint")
     else
-        message=$(../target/debug/cmt --message-only $provider_flag)
+        message=$("$CMT_BIN" --message-only $provider_flag)
     fi
 
     echo "Generated message:"
@@ -64,9 +67,9 @@ echo "✓ Git repository initialized"
 echo -e "\n📊 Testing diff display..."
 echo "Initial content" > test.txt
 git add test.txt
-../target/debug/cmt --show-diff
+"$CMT_BIN" --show-diff
 # Verify diff output contains our file
-../target/debug/cmt --show-diff | grep -q "test.txt" || {
+"$CMT_BIN" --show-diff | grep -q "test.txt" || {
     echo "❌ Failed: Diff output doesn't show test.txt"
     exit 1
 }

@@ -1,9 +1,31 @@
+use clap::Parser;
 use colored::*;
 use dotenv::dotenv;
 use git2::{Repository, StatusOptions};
 use reqwest::blocking::Client;
 use serde_json::{json, Value};
 use std::{env, process};
+
+/// A CLI tool that generates commit messages using OpenAI
+#[derive(Parser, Debug)]
+#[command(author, version, about, long_about = None)]
+struct Args {
+    /// Only output the generated commit message, without formatting
+    #[arg(short, long)]
+    message_only: bool,
+
+    /// Show the diff of staged changes
+    #[arg(short, long)]
+    show_diff: bool,
+
+    /// Use a different OpenAI model (default: gpt-4o)
+    #[arg(long, default_value = "gpt-4o")]
+    model: String,
+
+    /// Adjust the creativity of the generated message (0.0 to 2.0)
+    #[arg(short, long, default_value_t = 1.0)]
+    temperature: f32,
+}
 
 fn get_staged_changes(repo: &Repository) -> String {
     let mut status_opts = StatusOptions::new();
@@ -41,7 +63,10 @@ fn get_staged_changes(repo: &Repository) -> String {
     changes.join("\n")
 }
 
-fn generate_commit_message(changes: &str) -> Result<String, Box<dyn std::error::Error>> {
+fn generate_commit_message(
+    changes: &str,
+    args: &Args,
+) -> Result<String, Box<dyn std::error::Error>> {
     if changes.is_empty() {
         return Ok(String::from("No staged changes found"));
     }
@@ -61,7 +86,7 @@ fn generate_commit_message(changes: &str) -> Result<String, Box<dyn std::error::
         .header("Authorization", format!("Bearer {}", api_key))
         .header("Content-Type", "application/json")
         .json(&json!({
-            "model": "gpt-4o",
+            "model": args.model,
             "messages": [
                 {
                     "role": "system",
@@ -91,7 +116,7 @@ You are a helpful assistant that generates clear and concise git commit messages
                     "content": prompt
                 }
             ],
-            "temperature": 1.0,
+            "temperature": args.temperature,
             "max_tokens": 100
         }))
         .send()?;
@@ -106,8 +131,19 @@ You are a helpful assistant that generates clear and concise git commit messages
     Ok(message)
 }
 
+fn show_git_diff(repo: &Repository) -> Result<(), Box<dyn std::error::Error>> {
+    let diff = repo.diff_index_to_workdir(None, None)?;
+    let stats = diff.stats()?;
+    println!("\n{}", "Diff Statistics:".blue().bold());
+    println!("Files changed: {}", stats.files_changed());
+    println!("Insertions: {}", stats.insertions());
+    println!("Deletions: {}", stats.deletions());
+    Ok(())
+}
+
 fn main() {
     dotenv().ok(); // Load .env file if it exists
+    let args = Args::parse();
 
     let repo = match Repository::open(".") {
         Ok(repo) => repo,
@@ -123,12 +159,12 @@ fn main() {
     if staged_changes.is_empty() {
         println!("{}", "No staged changes found.".yellow().bold());
         println!("Stage some changes first with 'git add <files>'");
-        process::exit(0);
+        process::exit(1);
     }
 
-    match generate_commit_message(&staged_changes) {
+    match generate_commit_message(&staged_changes, &args) {
         Ok(commit_message) => {
-            if std::env::args().len() > 1 && std::env::args().nth(1).unwrap() == "--message-only" {
+            if args.message_only {
                 // When used with git commit -F, only output the message
                 print!("{}", commit_message);
             } else {
@@ -138,13 +174,19 @@ fn main() {
                 println!("{}", staged_changes);
                 println!("{}", "-".repeat(30));
 
+                if args.show_diff {
+                    if let Err(e) = show_git_diff(&repo) {
+                        eprintln!("Failed to show diff: {}", e);
+                    }
+                }
+
                 println!("\n{}", "Generated commit message:".green().bold());
                 println!("{}", "-".repeat(30));
                 println!("{}", commit_message);
                 println!("{}", "-".repeat(30));
 
                 println!("\nTo use this message, run:");
-                println!("git commit -F <(cargo run --quiet --message-only)");
+                println!("git commit -F <(cargo run --quiet -- --message-only)");
             }
         }
         Err(e) => {

@@ -6,6 +6,7 @@ Format of the Commit Message:
 {feat | fix | docs | style | test | chore}: {subject}
 
 The type should be:
+- refactor: for restructuring code without changing functionality
 - feat: for new features or significant additions
 - fix: for bug fixes or corrections
 - docs: for documentation changes
@@ -16,3 +17,5 @@ The type should be:
 Also include a list in markdown format (using -) of more detailed changes, max line length of 80 characters, with one empty line between the message and the list.
 
 Important: Only describe the changes that are actually shown in the diff. Do not make assumptions about other changes that might have been made. Do not emphasize changes to lockfiles, or cleaning up unused imports or other trivial formatting changes.
+
+The first line has max width of 50. The list of changes has a max width of 80.

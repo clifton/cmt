@@ -1,6 +1,6 @@
 [package]
 name = "cmt"
-version = "0.3.3"
+version = "0.3.4"
 edition = "2021"
 description = "A CLI tool that generates commit messages using OpenAI or Anthropic Claude"
 authors = ["Clifton King <cliftonk@gmail.com>"]
@@ -15,6 +15,14 @@ categories = [
   "development-tools",
   "development-tools::build-utils",
 ]
+
+[[bin]]
+name = "cmt"
+path = "src/bin/main.rs"
+
+[lib]
+name = "cmt"
+path = "src/lib.rs"
 
 [dependencies]
 git2 = { version = "0.20.0", default-features = false }

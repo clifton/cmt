@@ -18,52 +18,27 @@ jobs:
     if: ${{ github.event_name == 'pull_request' || github.event.workflow_run.conclusion == 'success' }}
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            shell: bash
+            sudo: sudo
+          - os: macos-latest
+            shell: bash
+            sudo: sudo
+          - os: windows-latest
+            shell: msys2 {0}
+            sudo: ""
 
     runs-on: ${{ matrix.os }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Test install script
-        shell: bash
-        run: |
-          # First ensure the script is executable
-          chmod +x ./scripts/install.sh
-
-          # Run the script
-          ./scripts/install.sh
-
-          # Verify cmt is installed and executable
-          which cmt
-          cmt --version
-
-      - name: Test install script via curl
-        shell: bash
-        run: |
-          # Remove previous installation
-          sudo rm -f $(which cmt)
-
-          # Set branch based on event type
-          export BRANCH="${{ github.event_name == 'pull_request' && github.head_ref || 'main' }}"
-
-          # Test the curl installation method
-          curl -sSL "https://raw.githubusercontent.com/cliftonk/cmt/${BRANCH}/scripts/install.sh" | sh
-
-          # Verify cmt is installed and executable
-          which cmt
-          cmt --version
-
-  test-install-windows:
-    # Only check workflow success on workflow_run events
-    if: ${{ github.event_name == 'pull_request' || github.event.workflow_run.conclusion == 'success' }}
-    runs-on: windows-latest
     defaults:
       run:
-        shell: msys2 {0}
+        shell: ${{ matrix.shell }}
+
     steps:
       - uses: actions/checkout@v4
 
       - name: Setup MSYS2
+        if: matrix.os == 'windows-latest'
         uses: msys2/setup-msys2@v2
         with:
           msystem: MINGW64
@@ -85,10 +60,10 @@ jobs:
       - name: Test install script via curl
         run: |
           # Remove previous installation
-          rm -f $(which cmt)
+          ${{ matrix.sudo }} rm -f $(which cmt)
 
           # Set branch based on event type
-          BRANCH="${{ github.event_name == 'pull_request' && github.head_ref || 'main' }}"
+          export BRANCH="${{ github.event_name == 'pull_request' && github.head_ref || 'main' }}"
 
           # Test the curl installation method
           curl -sSL "https://raw.githubusercontent.com/cliftonk/cmt/${BRANCH}/scripts/install.sh" | sh

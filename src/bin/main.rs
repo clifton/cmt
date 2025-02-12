@@ -53,10 +53,17 @@ fn main() {
                 println!("{}", "-".repeat(30));
 
                 println!("\nTo use this message, run:");
+                let hint_arg = args.hint.as_ref().map_or(String::new(), |h| {
+                    format!(" --hint '{}'", h.replace("'", "'\\''"))
+                });
+
                 if is_cargo_run() {
-                    println!("git commit -F <(cargo run --quiet -- --message-only)");
+                    println!(
+                        "git commit -F <(cargo run --quiet -- --message-only{})",
+                        hint_arg
+                    );
                 } else {
-                    println!("git commit -F <(cmt --message-only)");
+                    println!("git commit -F <(cmt --message-only{})", hint_arg);
                 }
             }
         }

@@ -265,10 +265,9 @@ fn main() {
                 println!("{}", "-".repeat(30));
 
                 println!("\nTo use this message, run:");
-                let hint_arg = args
-                    .hint
-                    .as_ref()
-                    .map_or(String::new(), |h| format!(" --hint \"{}\"", h));
+                let hint_arg = args.hint.as_ref().map_or(String::new(), |h| {
+                    format!(" --hint '{}'", h.replace("'", "'\\''"))
+                });
 
                 if is_cargo_run() {
                     println!(

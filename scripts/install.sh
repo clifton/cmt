@@ -74,6 +74,11 @@ chmod +x "$TMP_DIR/$BINARY"
 
 # Install binary
 if [ -n "$INSTALL_DIR" ]; then
+    # Use provided install directory
+    mkdir -p "$INSTALL_DIR"
+elif [ "$PLATFORM" = "windows" ]; then
+    # Default to mingw64/bin for Windows/MSYS2
+    INSTALL_DIR="/mingw64/bin"
     mkdir -p "$INSTALL_DIR"
 elif [ -w "/usr/local/bin" ]; then
     INSTALL_DIR="/usr/local/bin"

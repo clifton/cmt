@@ -46,6 +46,8 @@ jobs:
           install: curl
 
       - name: Test install script
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # First ensure the script is executable
           chmod +x ./scripts/install.sh
@@ -58,6 +60,8 @@ jobs:
           cmt --version
 
       - name: Test install script via curl
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           # Remove previous installation
           ${{ matrix.sudo }} rm -f $(which cmt)

@@ -42,7 +42,12 @@ fi
 
 # Get latest version with debug output
 echo "Fetching latest release information..."
-GITHUB_API_RESPONSE=$(curl -sL https://api.github.com/repos/cliftonk/cmt/releases/latest)
+AUTH_HEADER=""
+if [ -n "$GITHUB_TOKEN" ]; then
+    AUTH_HEADER="Authorization: token $GITHUB_TOKEN"
+fi
+
+GITHUB_API_RESPONSE=$(curl -sL ${AUTH_HEADER:+-H "$AUTH_HEADER"} https://api.github.com/repos/cliftonk/cmt/releases/latest)
 if [ -z "$GITHUB_API_RESPONSE" ]; then
     echo "Error: Empty response from GitHub API"
     exit 1
@@ -65,7 +70,7 @@ trap 'rm -rf "$TMP_DIR"' EXIT
 # Download binary
 DOWNLOAD_URL="https://github.com/cliftonk/cmt/releases/download/${LATEST_VERSION}/${BINARY}"
 echo "Downloading from: ${DOWNLOAD_URL}"
-curl -sL "$DOWNLOAD_URL" -o "$TMP_DIR/$BINARY"
+curl -sL ${AUTH_HEADER:+-H "$AUTH_HEADER"} "$DOWNLOAD_URL" -o "$TMP_DIR/$BINARY"
 
 # Make binary executable
 chmod +x "$TMP_DIR/$BINARY"

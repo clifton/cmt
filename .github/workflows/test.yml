@@ -28,7 +28,7 @@ jobs:
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             ~/.cargo/git
-            target/
+          cache-on-failure: true
 
       - name: Run tests
-        run: cargo test --no-fail-fast -- --test-threads=1
+        run: cargo test --no-fail-fast

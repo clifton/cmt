@@ -23,7 +23,7 @@ jobs:
       - name: Setup Rust cache
         uses: Swatinem/rust-cache@v2
         with:
-          shared-key: "cmt-test"
+          shared-key: "cmt-integration"
           cache-directories: |
             ~/.cargo/registry/index
             ~/.cargo/registry/cache

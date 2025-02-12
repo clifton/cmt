@@ -1,4 +1,4 @@
-name: Test Install Script
+name: Install Script
 
 on:
   workflow_run:
@@ -13,10 +13,10 @@ on:
       - '.github/workflows/test-install.yml'
 
 jobs:
-  test-install:
-    # Only check workflow success on workflow_run events
+  test:
     if: ${{ github.event_name == 'pull_request' || github.event.workflow_run.conclusion == 'success' }}
     strategy:
+      fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
@@ -29,6 +29,7 @@ jobs:
             shell: msys2 {0}
             sudo: ""
 
+    name: Test on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -45,33 +46,21 @@ jobs:
           update: true
           install: curl
 
-      - name: Test install script
+      - name: Test local install
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # First ensure the script is executable
           chmod +x ./scripts/install.sh
-
-          # Run the script
           ./scripts/install.sh
-
-          # Verify cmt is installed and executable
           which cmt
           cmt --version
 
-      - name: Test install script via curl
+      - name: Test remote install
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Remove previous installation
           ${{ matrix.sudo }} rm -f $(which cmt)
-
-          # Set branch based on event type
           export BRANCH="${{ github.event_name == 'pull_request' && github.head_ref || 'main' }}"
-
-          # Test the curl installation method
           curl -sSL "https://raw.githubusercontent.com/clifton/cmt/${BRANCH}/scripts/install.sh" | sh
-
-          # Verify cmt is installed and executable
           which cmt
           cmt --version

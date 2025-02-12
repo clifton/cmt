@@ -27,7 +27,7 @@ jobs:
           sudo apt-get install -y libssl-dev pkg-config libgit2-dev
 
       - name: Build binary
-        run: cargo build --verbose
+        run: cargo build
 
       - name: Setup git user
         run: |
@@ -37,22 +37,5 @@ jobs:
 
       - name: Run integration test
         run: |
-          # Create a test repository
-          mkdir test-repo
-          cd test-repo
-          git init
-
-          # Create and stage a test file
-          echo "Hello, World!" > test.txt
-          git add test.txt
-
-          # Run cmt and verify output
-          ../target/debug/cmt --show-diff | grep -q "test.txt"
-
-          # Test commit message generation
-          message=$(../target/debug/cmt --message-only)
-          echo "$message" | grep -q "^[a-z]\+: .*$"  # Check conventional commit format
-
-          # Test actual commit
-          git commit -F <(echo "$message")
-          git log -1 --pretty=%B | grep -q "^[a-z]\+: .*$"  # Verify commit message format
+          chmod +x tests/integration.sh
+          tests/integration.sh

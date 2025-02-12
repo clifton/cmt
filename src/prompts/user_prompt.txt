@@ -1,4 +1,4 @@
-Generate a concise and descriptive git commit message for the following changes:
+Generate a concise and descriptive git commit message for the following git diff:
 
 {}
 

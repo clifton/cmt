@@ -4,7 +4,7 @@ use anthropic::{client::Client as Anthropic, config::AnthropicConfig};
 use clap::Parser;
 use colored::*;
 use dotenv::dotenv;
-use git2::{Repository, StatusOptions};
+use git2::Repository;
 use reqwest::blocking::Client;
 use serde_json::{json, Value};
 use std::{env, process};
@@ -52,40 +52,46 @@ fn is_cargo_run() -> bool {
         .unwrap_or(false)
 }
 
-fn get_staged_changes(repo: &Repository) -> String {
-    let mut status_opts = StatusOptions::new();
-    status_opts.include_untracked(false);
-
-    let statuses = repo.statuses(Some(&mut status_opts)).unwrap_or_else(|e| {
-        eprintln!("Failed to get repository status: {}", e);
-        process::exit(1);
-    });
-
-    let mut changes = Vec::new();
-
-    for entry in statuses.iter() {
-        let status = entry.status();
-        let is_staged = status.is_index_new()
-            || status.is_index_modified()
-            || status.is_index_deleted()
-            || status.is_index_renamed()
-            || status.is_index_typechange();
-
-        if is_staged {
-            let path = entry.path().unwrap_or("unknown path");
-            let status_str = match status {
-                s if s.is_index_new() => "added",
-                s if s.is_index_modified() => "modified",
-                s if s.is_index_deleted() => "deleted",
-                s if s.is_index_renamed() => "renamed",
-                s if s.is_index_typechange() => "type changed",
-                _ => "changed",
-            };
-            changes.push(format!("{}: {}", status_str, path));
+fn get_staged_changes(repo: &Repository) -> Result<String, git2::Error> {
+    let mut opts = git2::DiffOptions::new();
+    let tree = match repo.head().and_then(|head| head.peel_to_tree()) {
+        Ok(tree) => tree,
+        Err(_) => {
+            // If there's no HEAD (new repo), use an empty tree
+            repo.treebuilder(None)
+                .and_then(|builder| builder.write())
+                .and_then(|oid| repo.find_tree(oid))
+                .map_err(|e| {
+                    git2::Error::from_str(&format!("Failed to create empty tree: {}", e))
+                })?
         }
-    }
+    };
 
-    changes.join("\n")
+    let diff = repo
+        .diff_tree_to_index(Some(&tree), None, Some(&mut opts))
+        .map_err(|e| git2::Error::from_str(&format!("Failed to get repository diff: {}", e)))?;
+
+    let mut diff_output = String::new();
+    diff.print(git2::DiffFormat::Patch, |_delta, _hunk, line| {
+        use git2::DiffLineType::*;
+        match line.origin_value() {
+            Addition | Deletion | Context => {
+                diff_output.push(char::from(line.origin()));
+                diff_output.push_str(std::str::from_utf8(line.content()).unwrap_or(""));
+                true
+            }
+            _ => true,
+        }
+    })
+    .map_err(|e| git2::Error::from_str(&format!("Failed to format diff: {}", e)))?;
+
+    if diff_output.is_empty() {
+        Err(git2::Error::from_str(
+            "No changes have been staged for commit",
+        ))
+    } else {
+        Ok(diff_output)
+    }
 }
 
 async fn generate_commit_message_claude(
@@ -207,13 +213,14 @@ fn main() {
         }
     };
 
-    let staged_changes = get_staged_changes(&repo);
-
-    if staged_changes.is_empty() {
-        println!("{}", "No staged changes found.".yellow().bold());
-        println!("Stage some changes first with 'git add <files>'");
-        process::exit(1);
-    }
+    let staged_changes = match get_staged_changes(&repo) {
+        Ok(changes) => changes,
+        Err(e) => {
+            eprintln!("{}", "Error:".red().bold());
+            eprintln!("{}", e);
+            process::exit(1);
+        }
+    };
 
     match generate_commit_message(&staged_changes, &args) {
         Ok(commit_message) => {

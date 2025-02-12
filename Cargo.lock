@@ -183,7 +183,7 @@ checksum = "f46ad14479a25103f283c0f10005961cf086d8dc42205bb44c46ac563475dca6"
 
 [[package]]
 name = "cmt"
-version = "0.3.2"
+version = "0.3.3"
 dependencies = [
  "clap",
  "colored",
@@ -781,7 +781,7 @@ dependencies = [
  "once_cell",
  "socket2",
  "tracing",
- "windows-sys 0.52.0",
+ "windows-sys 0.59.0",
 ]
 
 [[package]]

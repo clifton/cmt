@@ -16,14 +16,19 @@
 
 ## Installation
 
-### Prerequisites
+### Using Install Script (Recommended)
 
-- Rust and Cargo (install from [rustup.rs](https://rustup.rs))
-- An Anthropic API key and/or OpenAI API key
+The easiest way to install `cmt` is using our install script:
+
+```bash
+curl -sSL https://raw.githubusercontent.com/cliftonk/cmt/main/scripts/install.sh | sh
+```
+
+This will automatically download and install the latest version for your platform.
 
 ### Installing from crates.io
 
-The easiest way to install `cmt` is directly from crates.io:
+You can also install `cmt` directly from crates.io:
 
 ```bash
 cargo install cmt

@@ -38,7 +38,10 @@ jobs:
           git config --global user.name "Test User"
           git config --global init.defaultBranch main
 
-      - name: Run integration test
+      - name: Run integration tests
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
         run: |
-          chmod +x tests/integration.sh
-          tests/integration.sh
+          chmod +x scripts/integration.sh
+          scripts/integration.sh

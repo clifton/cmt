@@ -70,7 +70,7 @@ jobs:
           export BRANCH="${{ github.event_name == 'pull_request' && github.head_ref || 'main' }}"
 
           # Test the curl installation method
-          curl -sSL "https://raw.githubusercontent.com/cliftonk/cmt/${BRANCH}/scripts/install.sh" | sh
+          curl -sSL "https://raw.githubusercontent.com/clifton/cmt/${BRANCH}/scripts/install.sh" | sh
 
           # Verify cmt is installed and executable
           which cmt

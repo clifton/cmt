@@ -40,22 +40,20 @@ else
     BINARY="cmt-${PLATFORM}-${ARCH}"
 fi
 
-# Get latest version with debug output
-echo "Fetching latest release information..."
-AUTH_HEADER=""
+# Get latest version
+CURL_HEADERS="-H 'Accept: application/vnd.github+json' -H 'X-GitHub-Api-Version: 2022-11-28'"
+
 if [ -n "$GITHUB_TOKEN" ]; then
-    AUTH_HEADER="Authorization: token $GITHUB_TOKEN"
+    CURL_HEADERS="$CURL_HEADERS -H 'Authorization: Bearer $GITHUB_TOKEN'"
 fi
 
-GITHUB_API_RESPONSE=$(curl -sL ${AUTH_HEADER:+-H "$AUTH_HEADER"} https://api.github.com/repos/cliftonk/cmt/releases/latest)
+GITHUB_API_RESPONSE=$(eval curl -sL $CURL_HEADERS https://api.github.com/repos/clifton/cmt/releases/latest)
 if [ -z "$GITHUB_API_RESPONSE" ]; then
     echo "Error: Empty response from GitHub API"
     exit 1
 fi
 
-echo "API Response: $GITHUB_API_RESPONSE"
 LATEST_VERSION=$(echo "$GITHUB_API_RESPONSE" | grep '"tag_name":' | cut -d'"' -f4)
-
 if [ -z "$LATEST_VERSION" ]; then
     echo "Error: Could not parse version from GitHub API response"
     exit 1
@@ -68,9 +66,8 @@ TMP_DIR=$(mktemp -d)
 trap 'rm -rf "$TMP_DIR"' EXIT
 
 # Download binary
-DOWNLOAD_URL="https://github.com/cliftonk/cmt/releases/download/${LATEST_VERSION}/${BINARY}"
-echo "Downloading from: ${DOWNLOAD_URL}"
-curl -sL ${AUTH_HEADER:+-H "$AUTH_HEADER"} "$DOWNLOAD_URL" -o "$TMP_DIR/$BINARY"
+DOWNLOAD_URL="https://github.com/clifton/cmt/releases/download/${LATEST_VERSION}/${BINARY}"
+eval curl -sL $CURL_HEADERS "$DOWNLOAD_URL" -o "$TMP_DIR/$BINARY"
 
 # Make binary executable
 chmod +x "$TMP_DIR/$BINARY"
@@ -78,7 +75,6 @@ chmod +x "$TMP_DIR/$BINARY"
 # Install binary
 INSTALL_DIR="/usr/local/bin"
 if [ ! -w "$INSTALL_DIR" ]; then
-    # Try installing to ~/.local/bin if /usr/local/bin is not writable
     INSTALL_DIR="$HOME/.local/bin"
     mkdir -p "$INSTALL_DIR"
 fi

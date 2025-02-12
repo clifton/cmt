@@ -27,6 +27,10 @@ pub struct Args {
     /// Adjust the creativity of the generated message (0.0 to 2.0)
     #[arg(short, long)]
     pub temperature: Option<f32>,
+
+    /// Add a hint to guide the AI in generating the commit message
+    #[arg(long)]
+    pub hint: Option<String>,
 }
 
 impl Args {
@@ -52,6 +56,7 @@ mod tests {
         assert!(!args.openai);
         assert!(args.anthropic);
         assert!(args.temperature.is_none());
+        assert!(args.hint.is_none());
     }
 
     #[test]
@@ -111,6 +116,13 @@ mod tests {
     }
 
     #[test]
+    fn test_hint_option() {
+        let hint = "Fix the bug in the login flow";
+        let args = Args::new_from(["cmt", "--hint", hint].iter().map(ToString::to_string));
+        assert_eq!(args.hint, Some(hint.to_string()));
+    }
+
+    #[test]
     fn test_combined_flags() {
         let args = Args::new_from(
             [
@@ -122,6 +134,8 @@ mod tests {
                 "--openai",
                 "--temperature",
                 "0.8",
+                "--hint",
+                "Fix the login bug",
             ]
             .iter()
             .map(ToString::to_string),
@@ -133,6 +147,7 @@ mod tests {
         assert!(args.openai);
         assert!(!args.anthropic);
         assert_eq!(args.temperature, Some(0.8));
+        assert_eq!(args.hint, Some("Fix the login bug".to_string()));
     }
 
     #[test]

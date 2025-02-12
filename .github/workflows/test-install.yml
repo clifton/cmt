@@ -1,0 +1,91 @@
+name: Test Install Script
+
+on:
+  push:
+    paths:
+      - 'scripts/install.sh'
+      - '.github/workflows/test-install.yml'
+  pull_request:
+    paths:
+      - 'scripts/install.sh'
+      - '.github/workflows/test-install.yml'
+
+jobs:
+  test-install:
+    strategy:
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        include:
+          - os: ubuntu-latest
+            shell: bash
+          - os: macos-latest
+            shell: bash
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Test install script
+        shell: ${{ matrix.shell }}
+        run: |
+          # First ensure the script is executable
+          chmod +x ./scripts/install.sh
+
+          # Run the script
+          ./scripts/install.sh
+
+          # Verify cmt is installed and executable
+          which cmt
+          cmt --version
+
+      - name: Test install script via curl
+        shell: ${{ matrix.shell }}
+        run: |
+          # Remove previous installation
+          sudo rm -f $(which cmt)
+
+          # Test the curl installation method
+          curl -sSL https://raw.githubusercontent.com/cliftonk/cmt/main/scripts/install.sh | sh
+
+          # Verify cmt is installed and executable
+          which cmt
+          cmt --version
+
+  test-install-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup MSYS2
+        uses: msys2/setup-msys2@v2
+        with:
+          msystem: MINGW64
+          update: true
+          install: curl
+
+      - name: Test install script
+        run: |
+          # First ensure the script is executable
+          chmod +x ./scripts/install.sh
+
+          # Run the script
+          ./scripts/install.sh
+
+          # Verify cmt is installed and executable
+          which cmt
+          cmt --version
+
+      - name: Test install script via curl
+        run: |
+          # Remove previous installation
+          rm -f $(which cmt)
+
+          # Test the curl installation method
+          curl -sSL https://raw.githubusercontent.com/cliftonk/cmt/main/scripts/install.sh | sh
+
+          # Verify cmt is installed and executable
+          which cmt
+          cmt --version

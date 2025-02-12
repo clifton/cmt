@@ -73,8 +73,11 @@ eval curl -sL $CURL_HEADERS "$DOWNLOAD_URL" -o "$TMP_DIR/$BINARY"
 chmod +x "$TMP_DIR/$BINARY"
 
 # Install binary
-INSTALL_DIR="/usr/local/bin"
-if [ ! -w "$INSTALL_DIR" ]; then
+if [ -n "$INSTALL_DIR" ]; then
+    mkdir -p "$INSTALL_DIR"
+elif [ -w "/usr/local/bin" ]; then
+    INSTALL_DIR="/usr/local/bin"
+else
     INSTALL_DIR="$HOME/.local/bin"
     mkdir -p "$INSTALL_DIR"
 fi

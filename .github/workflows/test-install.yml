@@ -22,12 +22,15 @@ jobs:
           - os: ubuntu-latest
             shell: bash
             sudo: sudo
+            install_dir: /usr/local/bin
           - os: macos-latest
             shell: bash
             sudo: sudo
+            install_dir: /usr/local/bin
           - os: windows-latest
             shell: msys2 {0}
             sudo: ""
+            install_dir: /mingw64/bin
 
     name: Test on ${{ matrix.os }}
     runs-on: ${{ matrix.os }}
@@ -49,6 +52,7 @@ jobs:
       - name: Test local install
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INSTALL_DIR: ${{ matrix.install_dir }}
         run: |
           chmod +x ./scripts/install.sh
           ./scripts/install.sh
@@ -58,6 +62,7 @@ jobs:
       - name: Test remote install
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          INSTALL_DIR: ${{ matrix.install_dir }}
         run: |
           ${{ matrix.sudo }} rm -f $(which cmt)
           export BRANCH="${{ github.event_name == 'pull_request' && github.head_ref || 'main' }}"

@@ -1,6 +1,3 @@
-use anthropic::types::MessagesRequest;
-use anthropic::types::{ContentBlock, Message, Role};
-use anthropic::{client::Client as Anthropic, config::AnthropicConfig};
 use clap::Parser;
 use colored::*;
 use dotenv::dotenv;
@@ -71,37 +68,36 @@ fn get_staged_changes(repo: &Repository) -> Result<String, git2::Error> {
         .diff_tree_to_index(Some(&tree), None, Some(&mut opts))
         .map_err(|e| git2::Error::from_str(&format!("Failed to get repository diff: {}", e)))?;
 
-    let mut diff_output = String::new();
-    diff.print(git2::DiffFormat::Patch, |_delta, _hunk, line| {
+    let mut diff_output = Vec::new();
+    diff.print(git2::DiffFormat::Patch, |_, _, line| {
         use git2::DiffLineType::*;
         match line.origin_value() {
             Addition | Deletion | Context => {
-                diff_output.push(char::from(line.origin()));
-                diff_output.push_str(std::str::from_utf8(line.content()).unwrap_or(""));
-                true
+                diff_output.extend_from_slice(line.content());
             }
-            _ => true,
+            _ => {}
         }
+        true
     })
     .map_err(|e| git2::Error::from_str(&format!("Failed to format diff: {}", e)))?;
 
-    if diff_output.is_empty() {
+    let diff_str = String::from_utf8_lossy(&diff_output).to_string();
+
+    if diff_str.is_empty() {
         Err(git2::Error::from_str(
             "No changes have been staged for commit",
         ))
     } else {
-        Ok(diff_output)
+        Ok(diff_str)
     }
 }
 
-async fn generate_commit_message_claude(
+fn generate_commit_message_claude(
     changes: &str,
     args: &Args,
 ) -> Result<String, Box<dyn std::error::Error>> {
     let api_key = env::var("ANTHROPIC_API_KEY").expect("ANTHROPIC_API_KEY must be set");
-    let mut anthropic_config = AnthropicConfig::default();
-    anthropic_config.api_key = api_key;
-    let client = Anthropic::try_from(anthropic_config)?;
+    let client = Client::new();
 
     let model = args
         .model
@@ -110,28 +106,52 @@ async fn generate_commit_message_claude(
 
     let user_prompt = USER_PROMPT_TEMPLATE.replace("{}", changes);
 
-    let message = Message {
-        role: Role::User,
-        content: vec![ContentBlock::Text { text: user_prompt }],
-    };
-
     let response = client
-        .messages(MessagesRequest {
-            model,
-            max_tokens: 100,
-            temperature: Some(args.temperature.unwrap_or(CLAUDE_DEFAULT_TEMP) as f64),
-            system: SYSTEM_PROMPT.to_string(),
-            messages: vec![message],
-            ..Default::default()
-        })
-        .await?;
-    let content = response.content.first().unwrap();
-    let text = match content {
-        ContentBlock::Text { text } => text.clone(),
-        _ => String::from("Received unexpected content block type from Claude API"),
-    };
+        .post("https://api.anthropic.com/v1/messages")
+        .header("x-api-key", api_key)
+        .header("anthropic-version", "2023-06-01")
+        .header("content-type", "application/json")
+        .json(&json!({
+            "model": model,
+            "max_tokens": 1024,
+            "temperature": args.temperature.unwrap_or(CLAUDE_DEFAULT_TEMP),
+            "system": SYSTEM_PROMPT,
+            "messages": [{
+                "role": "user",
+                "content": user_prompt
+            }]
+        }))
+        .send()
+        .map_err(|e| {
+            if e.is_timeout() {
+                format!("Request timed out: {}", e)
+            } else if e.is_connect() {
+                format!(
+                    "Connection error: {}. Please check your internet connection.",
+                    e
+                )
+            } else if let Some(status) = e.status() {
+                format!("API error (status {}): {}", status, e)
+            } else {
+                format!("Request error: {}", e)
+            }
+        })?;
 
-    Ok(text)
+    if !response.status().is_success() {
+        let error_text = response.text()?;
+        return Err(format!("API returned error: {}", error_text).into());
+    }
+
+    let response_json: Value = response
+        .json()
+        .map_err(|e| format!("Failed to parse API response: {}", e))?;
+    let message = response_json["content"][0]["text"]
+        .as_str()
+        .unwrap_or("Failed to generate commit message")
+        .trim()
+        .to_string();
+
+    Ok(message)
 }
 
 fn generate_commit_message_openai(
@@ -186,7 +206,7 @@ fn generate_commit_message(
     if args.openai {
         generate_commit_message_openai(changes, args)
     } else {
-        tokio::runtime::Runtime::new()?.block_on(generate_commit_message_claude(changes, args))
+        generate_commit_message_claude(changes, args)
     }
 }
 
@@ -229,11 +249,6 @@ fn main() {
                 print!("{}", commit_message);
             } else {
                 // Interactive mode - show full formatted output
-                println!("{}", "\nStaged changes:".blue().bold());
-                println!("{}", "-".repeat(30));
-                println!("{}", staged_changes);
-                println!("{}", "-".repeat(30));
-
                 if args.show_diff {
                     if let Err(e) = show_git_diff(&repo) {
                         eprintln!("Failed to show diff: {}", e);

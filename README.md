@@ -18,11 +18,21 @@
 - Rust and Cargo (install from [rustup.rs](https://rustup.rs))
 - An OpenAI API key
 
+### Installing from crates.io
+
+The easiest way to install `cmt` is directly from crates.io:
+
+```bash
+cargo install cmt
+```
+
 ### Installing from source
+
+Alternatively, you can build from source:
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/cmt.git
+git clone https://github.com/cliftonk/cmt.git
 cd cmt
 
 # Build and install

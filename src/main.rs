@@ -27,6 +27,18 @@ struct Args {
     temperature: f32,
 }
 
+/// Check if we're running via `cargo run`
+fn is_cargo_run() -> bool {
+    env::current_exe()
+        .ok()
+        .and_then(|path| {
+            path.file_name()
+                .map(|name| name.to_string_lossy().into_owned())
+        })
+        .map(|name| name.contains("cmt-"))
+        .unwrap_or(false)
+}
+
 fn get_staged_changes(repo: &Repository) -> String {
     let mut status_opts = StatusOptions::new();
     status_opts.include_untracked(false);
@@ -186,7 +198,11 @@ fn main() {
                 println!("{}", "-".repeat(30));
 
                 println!("\nTo use this message, run:");
-                println!("git commit -F <(cargo run --quiet -- --message-only)");
+                if is_cargo_run() {
+                    println!("git commit -F <(cargo run --quiet -- --message-only)");
+                } else {
+                    println!("git commit -F <(cmt --message-only)");
+                }
             }
         }
         Err(e) => {

@@ -1,0 +1,57 @@
+name: Integration Test
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+env:
+  CARGO_TERM_COLOR: always
+  ANTHROPIC_API_KEY: test-api-key
+  OPENAI_API_KEY: test-api-key
+
+jobs:
+  integration:
+    name: Integration test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libssl-dev pkg-config libgit2-dev
+
+      - name: Build binary
+        run: cargo build --verbose
+
+      - name: Setup git user
+        run: |
+          git config --global user.email "test@example.com"
+          git config --global user.name "Test User"
+
+      - name: Run integration test
+        run: |
+          # Create a test repository
+          mkdir test-repo
+          cd test-repo
+          git init
+
+          # Create and stage a test file
+          echo "Hello, World!" > test.txt
+          git add test.txt
+
+          # Run cmt and verify output
+          ../target/debug/cmt --show-diff | grep -q "test.txt"
+
+          # Test commit message generation
+          message=$(../target/debug/cmt --message-only)
+          echo "$message" | grep -q "^[a-z]\+: .*$"  # Check conventional commit format
+
+          # Test actual commit
+          git commit -F <(echo "$message")
+          git log -1 --pretty=%B | grep -q "^[a-z]\+: .*$"  # Verify commit message format

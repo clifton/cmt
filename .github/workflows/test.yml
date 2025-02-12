@@ -12,28 +12,24 @@ env:
   OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
 
 jobs:
-  test:
-    name: Run tests
+  integration:
+    name: Integration test
     runs-on: ubuntu-latest
+    container:
+      image: rust:latest
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libssl-dev pkg-config libgit2-dev
-
-      - name: Cache dependencies
-        uses: actions/cache@v3
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
         with:
-          path: |
-            ~/.cargo/registry
+          shared-key: "integration-test"
+          cache-directories: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
             ~/.cargo/git
-            target
-          key: ${{ runner.os }}-cargo-${{ hashFiles('**/Cargo.lock') }}
+            target/
 
       - name: Run tests
         run: cargo test --verbose

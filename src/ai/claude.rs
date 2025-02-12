@@ -1,5 +1,4 @@
-use crate::ai::{AiProvider, CLAUDE_DEFAULT_TEMP};
-use crate::cli::Args;
+use crate::ai::AiProvider;
 use reqwest::blocking::Client;
 use serde_json::{json, Value};
 use std::{env, error::Error};
@@ -13,16 +12,14 @@ impl ClaudeProvider {
 }
 
 impl AiProvider for ClaudeProvider {
-    fn generate_commit_message(changes: &str, args: &Args) -> Result<String, Box<dyn Error>> {
+    fn complete(
+        model: &str,
+        temperature: f32,
+        system_prompt: &str,
+        user_prompt: &str,
+    ) -> Result<String, Box<dyn Error>> {
         let api_key = env::var("ANTHROPIC_API_KEY").expect("ANTHROPIC_API_KEY must be set");
         let client = Client::new();
-
-        let model = args
-            .model
-            .clone()
-            .unwrap_or_else(|| "claude-3-5-sonnet-latest".to_string());
-
-        let user_prompt = crate::prompts::USER_PROMPT_TEMPLATE.replace("{}", changes);
 
         let response = client
             .post(format!("{}/v1/messages", Self::api_base_url()))
@@ -32,8 +29,8 @@ impl AiProvider for ClaudeProvider {
             .json(&json!({
                 "model": model,
                 "max_tokens": 1024,
-                "temperature": args.temperature.unwrap_or(CLAUDE_DEFAULT_TEMP),
-                "system": crate::prompts::SYSTEM_PROMPT,
+                "temperature": temperature,
+                "system": system_prompt,
                 "messages": [{
                     "role": "user",
                     "content": user_prompt
@@ -102,10 +99,12 @@ mod tests {
             }"#)
             .create();
 
-        let args = Args::new_from(["cmt"].iter().map(ToString::to_string));
-        let changes = "Some test changes";
-
-        let result = ClaudeProvider::generate_commit_message(changes, &args);
+        let result = ClaudeProvider::complete(
+            "claude-3-5-sonnet-latest",
+            0.3,
+            "test system prompt",
+            "test user prompt",
+        );
         assert!(result.is_ok());
         let message = result.unwrap();
         assert!(message.contains("feat: add new feature"));
@@ -132,10 +131,12 @@ mod tests {
             )
             .create();
 
-        let args = Args::new_from(["cmt"].iter().map(ToString::to_string));
-        let changes = "Some test changes";
-
-        let result = ClaudeProvider::generate_commit_message(changes, &args);
+        let result = ClaudeProvider::complete(
+            "claude-3-5-sonnet-latest",
+            0.3,
+            "test system prompt",
+            "test user prompt",
+        );
         assert!(result.is_err());
         let error = result.unwrap_err().to_string();
         assert!(error.contains("Invalid request parameters"));
@@ -162,14 +163,12 @@ mod tests {
             )
             .create();
 
-        let args = Args::new_from(
-            ["cmt", "--model", "custom-model", "--temperature", "0.8"]
-                .iter()
-                .map(ToString::to_string),
+        let result = ClaudeProvider::complete(
+            "custom-model",
+            0.8,
+            "test system prompt",
+            "test user prompt",
         );
-        let changes = "Some test changes";
-
-        let result = ClaudeProvider::generate_commit_message(changes, &args);
         assert!(result.is_ok());
         let message = result.unwrap();
         assert_eq!(message, "test commit message");

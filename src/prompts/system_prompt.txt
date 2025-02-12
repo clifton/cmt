@@ -3,7 +3,7 @@ You must return only the commit message without any other text or quotes.
 Ignore changes to lock files. Be very succinct and focus only on the actual changes shown.
 
 Format of the Commit Message:
-{feat | fix | docs | style | test | chore}: {subject}
+{feat | fix | docs | style | test | chore}: {subject} [max width of this line is 50]
 
 The type should be:
 - refactor: for restructuring code without changing functionality

@@ -28,7 +28,6 @@ jobs:
             ~/.cargo/registry/index
             ~/.cargo/registry/cache
             ~/.cargo/git
-            target/
 
       - name: Build binary
         run: cargo build

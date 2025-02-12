@@ -15,20 +15,21 @@ jobs:
   integration:
     name: Integration test
     runs-on: ubuntu-latest
+    container:
+      image: rust:latest
+
     steps:
       - uses: actions/checkout@v4
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
+      - name: Setup Rust cache
+        uses: Swatinem/rust-cache@v2
         with:
-          components: rustc,cargo
-
-      - uses: Swatinem/rust-cache@v2
-
-      - name: Install dependencies
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y libssl-dev pkg-config libgit2-dev
+          shared-key: "integration-test"
+          cache-directories: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git
+            target/
 
       - name: Build binary
         run: cargo build

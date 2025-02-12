@@ -1,9 +1,8 @@
-use clap::Parser;
 use cmt::{generate_commit_message, show_git_diff, Args};
 use colored::*;
 use dotenv::dotenv;
 use git2::Repository;
-use std::process;
+use std::{env, process};
 
 /// Check if we're running via `cargo run`
 fn is_cargo_run() -> bool {
@@ -15,7 +14,7 @@ fn is_cargo_run() -> bool {
 
 fn main() {
     dotenv().ok(); // Load .env file if it exists
-    let args = Args::parse();
+    let args = Args::new_from(env::args());
 
     let repo = match Repository::open(".") {
         Ok(repo) => repo,

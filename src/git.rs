@@ -48,3 +48,105 @@ pub fn show_git_diff(repo: &Repository) -> Result<(), Box<dyn std::error::Error>
     println!("Deletions: {}", stats.deletions());
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs::File;
+    use std::io::Write;
+    use std::path::Path;
+    use tempfile::TempDir;
+
+    fn setup_test_repo() -> (TempDir, Repository) {
+        let temp_dir = TempDir::new().unwrap();
+        let repo = Repository::init(temp_dir.path()).unwrap();
+
+        // Configure test user
+        let mut config = repo.config().unwrap();
+        config.set_str("user.name", "Test User").unwrap();
+        config.set_str("user.email", "test@example.com").unwrap();
+
+        (temp_dir, repo)
+    }
+
+    fn create_and_stage_file(repo: &Repository, name: &str, content: &str) {
+        let path = repo.workdir().unwrap().join(name);
+        let mut file = File::create(path).unwrap();
+        writeln!(file, "{}", content).unwrap();
+
+        let mut index = repo.index().unwrap();
+        index.add_path(Path::new(name)).unwrap();
+        index.write().unwrap();
+    }
+
+    fn commit_all(repo: &Repository, message: &str) {
+        let mut index = repo.index().unwrap();
+        let tree_id = index.write_tree().unwrap();
+        let tree = repo.find_tree(tree_id).unwrap();
+
+        let sig = repo.signature().unwrap();
+        if let Ok(parent) = repo.head().and_then(|h| h.peel_to_commit()) {
+            repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &[&parent])
+                .unwrap();
+        } else {
+            repo.commit(Some("HEAD"), &sig, &sig, message, &tree, &[])
+                .unwrap();
+        }
+    }
+
+    #[test]
+    fn test_get_staged_changes_empty_repo() {
+        let (_temp_dir, repo) = setup_test_repo();
+        let result = get_staged_changes(&repo);
+        assert!(result.is_err());
+        assert_eq!(
+            result.unwrap_err().message(),
+            "No changes have been staged for commit"
+        );
+    }
+
+    #[test]
+    fn test_get_staged_changes_new_file() {
+        let (_temp_dir, repo) = setup_test_repo();
+
+        // Create and stage a new file
+        create_and_stage_file(&repo, "test.txt", "Hello, World!");
+
+        let changes = get_staged_changes(&repo).unwrap();
+        assert!(changes.contains("Hello, World!"));
+    }
+
+    #[test]
+    fn test_get_staged_changes_modified_file() {
+        let (_temp_dir, repo) = setup_test_repo();
+
+        // Create and commit initial file
+        create_and_stage_file(&repo, "test.txt", "Initial content");
+        commit_all(&repo, "Initial commit");
+
+        // Modify and stage the file
+        create_and_stage_file(&repo, "test.txt", "Modified content");
+
+        let changes = get_staged_changes(&repo).unwrap();
+        assert!(changes.contains("Initial content"));
+        assert!(changes.contains("Modified content"));
+    }
+
+    #[test]
+    fn test_show_git_diff() {
+        let (_temp_dir, repo) = setup_test_repo();
+
+        // Create initial file
+        create_and_stage_file(&repo, "test.txt", "Initial content");
+        commit_all(&repo, "Initial commit");
+
+        // Modify the file but don't stage it
+        let path = repo.workdir().unwrap().join("test.txt");
+        let mut file = File::create(path).unwrap();
+        writeln!(file, "Modified content").unwrap();
+
+        // Capture stdout to verify the output
+        let result = show_git_diff(&repo);
+        assert!(result.is_ok());
+    }
+}

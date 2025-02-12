@@ -4,6 +4,17 @@ version = "0.1.0"
 edition = "2021"
 description = "A CLI tool that generates commit messages using OpenAI"
 authors = ["Clifton King <cliftonk@gmail.com>"]
+license = "MIT"
+repository = "https://github.com/cliftonk/cmt"
+homepage = "https://github.com/cliftonk/cmt"
+documentation = "https://github.com/cliftonk/cmt#readme"
+readme = "README.md"
+keywords = ["git", "commit", "openai", "cli", "gpt"]
+categories = [
+  "command-line-utilities",
+  "development-tools",
+  "development-tools::build-utils",
+]
 
 [dependencies]
 git2 = "0.20.0"

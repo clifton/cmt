@@ -20,6 +20,10 @@ jobs:
 
       - name: Install Rust
         uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustc,cargo
+
+      - uses: Swatinem/rust-cache@v2
 
       - name: Install dependencies
         run: |

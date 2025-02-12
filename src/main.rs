@@ -39,6 +39,10 @@ struct Args {
     /// Adjust the creativity of the generated message (0.0 to 2.0)
     #[arg(short, long)]
     temperature: Option<f32>,
+
+    /// Add a hint to the commit message
+    #[arg(short, long)]
+    hint: Option<String>,
 }
 
 /// Check if we're running via `cargo run`
@@ -261,10 +265,18 @@ fn main() {
                 println!("{}", "-".repeat(30));
 
                 println!("\nTo use this message, run:");
+                let hint_arg = args
+                    .hint
+                    .as_ref()
+                    .map_or(String::new(), |h| format!(" --hint \"{}\"", h));
+
                 if is_cargo_run() {
-                    println!("git commit -F <(cargo run --quiet -- --message-only)");
+                    println!(
+                        "git commit -F <(cargo run --quiet -- --message-only{})",
+                        hint_arg
+                    );
                 } else {
-                    println!("git commit -F <(cmt --message-only)");
+                    println!("git commit -F <(cmt --message-only{})", hint_arg);
                 }
             }
         }

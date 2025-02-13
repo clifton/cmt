@@ -16,6 +16,10 @@ pub struct Args {
     #[arg(long, default_value_t = false)]
     pub show_raw_diff: bool,
 
+    /// Number of context lines to show in the git diff (default: 12)
+    #[arg(long, default_value_t = 12)]
+    pub context_lines: u32,
+
     /// Use a specific AI model (defaults to claude-3-5-sonnet-latest or gpt-4o depending on provider)
     #[arg(long)]
     pub model: Option<String>,
@@ -57,6 +61,7 @@ mod tests {
         assert!(!args.message_only);
         assert!(!args.no_diff_stats);
         assert!(!args.show_raw_diff);
+        assert_eq!(args.context_lines, 12);
         assert!(args.model.is_none());
         assert!(!args.openai);
         assert!(args.anthropic);
@@ -164,5 +169,15 @@ mod tests {
     fn test_show_raw_diff_flag() {
         let args = Args::new_from(["cmt", "--show-raw-diff"].iter().map(ToString::to_string));
         assert!(args.show_raw_diff);
+    }
+
+    #[test]
+    fn test_context_lines_option() {
+        let args = Args::new_from(
+            ["cmt", "--context-lines", "10"]
+                .iter()
+                .map(ToString::to_string),
+        );
+        assert_eq!(args.context_lines, 10);
     }
 }

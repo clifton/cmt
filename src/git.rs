@@ -1,8 +1,10 @@
 use colored::*;
-use git2::{DiffLineType, Error as GitError, Repository};
+use git2::{Error as GitError, Repository};
 
-pub fn get_staged_changes(repo: &Repository) -> Result<String, GitError> {
+pub fn get_staged_changes(repo: &Repository, context_lines: u32) -> Result<String, GitError> {
     let mut opts = git2::DiffOptions::new();
+    opts.context_lines(context_lines);
+
     let tree = match repo.head().and_then(|head| head.peel_to_tree()) {
         Ok(tree) => tree,
         Err(_) => {
@@ -190,7 +192,7 @@ mod tests {
     #[test]
     fn test_get_staged_changes_empty_repo() {
         let (_temp_dir, repo) = setup_test_repo();
-        let result = get_staged_changes(&repo);
+        let result = get_staged_changes(&repo, 0);
         assert!(result.is_err());
         assert_eq!(
             result.unwrap_err().message(),
@@ -205,7 +207,7 @@ mod tests {
         // Create and stage a new file
         create_and_stage_file(&repo, "test.txt", "Hello, World!");
 
-        let changes = get_staged_changes(&repo).unwrap();
+        let changes = get_staged_changes(&repo, 0).unwrap();
         assert!(changes.contains("Hello, World!"));
     }
 
@@ -220,7 +222,7 @@ mod tests {
         // Modify and stage the file
         create_and_stage_file(&repo, "test.txt", "Modified content");
 
-        let changes = get_staged_changes(&repo).unwrap();
+        let changes = get_staged_changes(&repo, 0).unwrap();
         assert!(changes.contains("Initial content"));
         assert!(changes.contains("Modified content"));
     }

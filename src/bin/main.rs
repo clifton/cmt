@@ -25,7 +25,7 @@ fn main() {
         }
     };
 
-    let staged_changes = match cmt::get_staged_changes(&repo) {
+    let staged_changes = match cmt::get_staged_changes(&repo, args.context_lines) {
         Ok(changes) => changes,
         Err(e) => {
             eprintln!("{}", "Error:".red().bold());

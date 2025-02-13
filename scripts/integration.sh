@@ -74,7 +74,7 @@ git config --local user.email "test@example.com"
 git config --local user.name "Test User"
 echo "✓ Git repository initialized"
 
-echo -e "\n📊 Testing diff display..."
+echo -e "\n📊 Testing diff statistics display..."
 echo "# Authentication Service
 This component handles user authentication and session management.
 
@@ -83,13 +83,35 @@ This component handles user authentication and session management.
 - Password validation
 - Session handling" > test.txt
 git add test.txt
-"$CMT_BIN" --show-diff
-# Verify diff output contains our file
-"$CMT_BIN" --show-diff | grep -q "test.txt" || {
-    echo "❌ Failed: Diff output doesn't show test.txt"
+
+# Capture the full output to verify both diff stats and file name
+output=$("$CMT_BIN")
+
+# Check for "Diff Statistics:" header
+if ! echo "$output" | grep -q "Diff Statistics:"; then
+    echo "❌ Failed: Missing 'Diff Statistics:' header in output"
+    echo "Output was:"
+    echo "$output"
     exit 1
-}
-echo "✓ Diff display working"
+fi
+
+# Check for the test file in the diff stats
+if ! echo "$output" | grep -q "test.txt"; then
+    echo "❌ Failed: Diff statistics output doesn't show test.txt"
+    echo "Output was:"
+    echo "$output"
+    exit 1
+fi
+
+# Check for file change indicators
+if ! echo "$output" | grep -q "file.*changed"; then
+    echo "❌ Failed: Missing file change statistics"
+    echo "Output was:"
+    echo "$output"
+    exit 1
+fi
+
+echo "✓ Diff statistics display working"
 
 # Test Claude (default)
 test_provider "Claude" "" ""

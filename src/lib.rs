@@ -5,4 +5,4 @@ pub mod prompts;
 
 pub use ai::{generate_commit_message, AiProvider};
 pub use cli::Args;
-pub use git::{get_staged_changes, show_git_diff};
+pub use git::{get_staged_changes, git_staged_changes};

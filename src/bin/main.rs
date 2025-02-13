@@ -1,4 +1,4 @@
-use cmt::{generate_commit_message, show_git_diff, Args};
+use cmt::{generate_commit_message, git_staged_changes, Args};
 use colored::*;
 use dotenv::dotenv;
 use git2::Repository;
@@ -41,9 +41,9 @@ fn main() {
                 print!("{}", commit_message);
             } else {
                 // Interactive mode - show full formatted output
-                if args.show_diff {
-                    if let Err(e) = show_git_diff(&repo) {
-                        eprintln!("Failed to show diff: {}", e);
+                if !args.no_diff_stats {
+                    if let Err(e) = git_staged_changes(&repo) {
+                        eprintln!("Failed to show diff statistics: {}", e);
                     }
                 }
 

@@ -8,9 +8,9 @@ pub struct Args {
     #[arg(short, long)]
     pub message_only: bool,
 
-    /// Show the diff of staged changes
-    #[arg(short, long)]
-    pub show_diff: bool,
+    /// Hide the diff statistics for staged changes
+    #[arg(long, default_value_t = false)]
+    pub no_diff_stats: bool,
 
     /// Use a specific AI model (defaults to claude-3-5-sonnet-latest or gpt-4o depending on provider)
     #[arg(long)]
@@ -51,7 +51,7 @@ mod tests {
     fn test_default_args() {
         let args = Args::new_from(["cmt"].iter().map(ToString::to_string));
         assert!(!args.message_only);
-        assert!(!args.show_diff);
+        assert!(!args.no_diff_stats);
         assert!(args.model.is_none());
         assert!(!args.openai);
         assert!(args.anthropic);
@@ -69,12 +69,9 @@ mod tests {
     }
 
     #[test]
-    fn test_show_diff_flag() {
-        let args = Args::new_from(["cmt", "--show-diff"].iter().map(ToString::to_string));
-        assert!(args.show_diff);
-
-        let args = Args::new_from(["cmt", "-s"].iter().map(ToString::to_string));
-        assert!(args.show_diff);
+    fn test_no_diff_stats_flag() {
+        let args = Args::new_from(["cmt", "--no-diff-stats"].iter().map(ToString::to_string));
+        assert!(args.no_diff_stats);
     }
 
     #[test]
@@ -128,7 +125,7 @@ mod tests {
             [
                 "cmt",
                 "--message-only",
-                "--show-diff",
+                "--no-diff-stats",
                 "--model",
                 "gpt-4",
                 "--openai",
@@ -142,7 +139,7 @@ mod tests {
         );
 
         assert!(args.message_only);
-        assert!(args.show_diff);
+        assert!(args.no_diff_stats);
         assert_eq!(args.model, Some("gpt-4".to_string()));
         assert!(args.openai);
         assert!(!args.anthropic);

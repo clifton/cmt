@@ -44,7 +44,7 @@ fn has_unstaged_changes(repo: &Repository) -> Result<bool, GitError> {
     Ok(diff.stats()?.files_changed() > 0)
 }
 
-pub fn show_git_diff(repo: &Repository) -> Result<(), Box<dyn std::error::Error>> {
+pub fn git_staged_changes(repo: &Repository) -> Result<(), Box<dyn std::error::Error>> {
     let mut opts = git2::DiffOptions::new();
     let tree = match repo.head().and_then(|head| head.peel_to_tree()) {
         Ok(tree) => tree,
@@ -63,29 +63,16 @@ pub fn show_git_diff(repo: &Repository) -> Result<(), Box<dyn std::error::Error>
 
     let stats = diff.stats()?;
 
-    println!("\n{}", "Staged Changes:".blue().bold());
+    println!("\n{}", "Diff Statistics:".blue().bold());
 
     // Print the summary with colors
     let insertions = stats.insertions();
     let deletions = stats.deletions();
     println!(
-        "{} file{} changed, {} insertion{}, {} deletion{}",
+        "{} files changed, {}(+) insertions, {}(-) deletions",
         stats.files_changed(),
-        if stats.files_changed() == 1 { "" } else { "s" },
-        format!(
-            "{}{}",
-            insertions,
-            if insertions == 1 { "(+)" } else { "(+)" }
-        )
-        .green(),
-        if insertions == 1 { "" } else { "s" },
-        format!(
-            "{}{}",
-            deletions,
-            if deletions == 1 { "(-)" } else { "(-)" }
-        )
-        .red(),
-        if deletions == 1 { "" } else { "s" }
+        format!("{}", insertions).green(),
+        format!("{}", deletions).red(),
     );
 
     // Print the per-file changes with visualization
@@ -94,20 +81,44 @@ pub fn show_git_diff(repo: &Repository) -> Result<(), Box<dyn std::error::Error>
     format_opts.insert(git2::DiffStatsFormat::INCLUDE_SUMMARY);
     let changes_buf = stats.to_buf(format_opts, 80)?;
 
+    // Find the longest filename for alignment
     let changes_str = String::from_utf8_lossy(&changes_buf);
+    let max_filename_len = changes_str
+        .lines()
+        .filter(|line| line.contains('|'))
+        .map(|line| line.splitn(2, '|').next().unwrap_or("").trim().len())
+        .max()
+        .unwrap_or(0);
+
+    // Print aligned file changes
     for line in changes_str.lines() {
         if line.contains('|') {
             let parts: Vec<&str> = line.splitn(2, '|').collect();
             if parts.len() == 2 {
                 let (file, changes) = (parts[0].trim(), parts[1].trim());
                 let count = changes.chars().filter(|&c| c == '+' || c == '-').count();
-                println!(
-                    "{} | {} {}{}",
+
+                // Extract the numeric count from the beginning of changes
+                let num_count = changes.split_whitespace().next().unwrap_or("0");
+
+                // Print the plus/minus visualization with colors
+                print!(
+                    "{:<width$} | {:>3} {:>3} ",
                     file,
                     count,
-                    changes.green(),
-                    "-".repeat(47_usize.saturating_sub(count))
+                    num_count,
+                    width = max_filename_len
                 );
+
+                // Print each character with appropriate color
+                for c in changes.chars().filter(|&c| c == '+' || c == '-') {
+                    if c == '+' {
+                        print!("{}", c.to_string().green());
+                    } else {
+                        print!("{}", c.to_string().red());
+                    }
+                }
+                println!();
             }
         }
     }
@@ -248,7 +259,7 @@ mod tests {
         create_and_stage_file(&repo, "new-staged.txt", "New staged content");
 
         // Should succeed and include warning about unstaged changes
-        let result = show_git_diff(&repo);
+        let result = git_staged_changes(&repo);
         assert!(result.is_ok());
     }
 }

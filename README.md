@@ -8,7 +8,7 @@
   - Anthropic's Claude 3.5 Sonnet (default, temperature 0.3)
   - OpenAI's GPT-4 Optimized (temperature 1.0)
 - 📝 Follows conventional commit format (`type: subject`)
-- 📊 Optional diff statistics
+- 📊 Built-in diff statistics (can be disabled)
 - 💡 Contextual hints to guide message generation
 - ⚙️ Configurable AI model and parameters
 - 🔑 Supports environment variables for API keys
@@ -88,7 +88,7 @@ Usage: cmt [OPTIONS]
 
 Options:
   -m, --message-only               Only output the generated commit message, without formatting
-  -s, --show-diff                  Show the diff of staged changes
+      --no-diff-stats             Hide the diff statistics for staged changes
       --model <MODEL>              Use a specific AI model (defaults to claude-3-5-sonnet-latest or gpt-4o depending on provider)
       --openai                     Use OpenAI instead of Claude (which is default)
       --anthropic                  Use Anthropic instead of OpenAI (which is default)
@@ -101,8 +101,11 @@ Options:
 ### Examples
 
 ```bash
-# Show diff statistics along with the message
-cmt --show-diff
+# Generate a commit message with diff statistics (default)
+cmt
+
+# Generate a commit message without diff statistics
+cmt --no-diff-stats
 
 # Use OpenAI with a custom temperature
 cmt --openai --temperature 0.8
@@ -111,7 +114,7 @@ cmt --openai --temperature 0.8
 cmt --hint "This fixes the login timeout issue"
 
 # Combine multiple options
-cmt --openai --model gpt-4 --hint "Update dependencies for security" --show-diff
+cmt --openai --model gpt-4 --hint "Update dependencies for security"
 
 # Use with git commit directly
 git commit -F <(cmt --message-only --hint "Refactor to improve performance")

@@ -8,9 +8,17 @@ pub struct Args {
     #[arg(short, long)]
     pub message_only: bool,
 
-    /// Show the diff of staged changes
-    #[arg(short, long)]
-    pub show_diff: bool,
+    /// Hide the diff statistics for staged changes
+    #[arg(long, default_value_t = false)]
+    pub no_diff_stats: bool,
+
+    /// Show the raw git diff that will be sent to the AI model
+    #[arg(long, default_value_t = false)]
+    pub show_raw_diff: bool,
+
+    /// Number of context lines to show in the git diff (default: 12)
+    #[arg(long, default_value_t = 12)]
+    pub context_lines: u32,
 
     /// Use a specific AI model (defaults to claude-3-5-sonnet-latest or gpt-4o depending on provider)
     #[arg(long)]
@@ -51,7 +59,9 @@ mod tests {
     fn test_default_args() {
         let args = Args::new_from(["cmt"].iter().map(ToString::to_string));
         assert!(!args.message_only);
-        assert!(!args.show_diff);
+        assert!(!args.no_diff_stats);
+        assert!(!args.show_raw_diff);
+        assert_eq!(args.context_lines, 12);
         assert!(args.model.is_none());
         assert!(!args.openai);
         assert!(args.anthropic);
@@ -69,12 +79,9 @@ mod tests {
     }
 
     #[test]
-    fn test_show_diff_flag() {
-        let args = Args::new_from(["cmt", "--show-diff"].iter().map(ToString::to_string));
-        assert!(args.show_diff);
-
-        let args = Args::new_from(["cmt", "-s"].iter().map(ToString::to_string));
-        assert!(args.show_diff);
+    fn test_no_diff_stats_flag() {
+        let args = Args::new_from(["cmt", "--no-diff-stats"].iter().map(ToString::to_string));
+        assert!(args.no_diff_stats);
     }
 
     #[test]
@@ -128,7 +135,7 @@ mod tests {
             [
                 "cmt",
                 "--message-only",
-                "--show-diff",
+                "--no-diff-stats",
                 "--model",
                 "gpt-4",
                 "--openai",
@@ -142,7 +149,7 @@ mod tests {
         );
 
         assert!(args.message_only);
-        assert!(args.show_diff);
+        assert!(args.no_diff_stats);
         assert_eq!(args.model, Some("gpt-4".to_string()));
         assert!(args.openai);
         assert!(!args.anthropic);
@@ -156,5 +163,21 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(err.contains("invalid float literal"));
+    }
+
+    #[test]
+    fn test_show_raw_diff_flag() {
+        let args = Args::new_from(["cmt", "--show-raw-diff"].iter().map(ToString::to_string));
+        assert!(args.show_raw_diff);
+    }
+
+    #[test]
+    fn test_context_lines_option() {
+        let args = Args::new_from(
+            ["cmt", "--context-lines", "10"]
+                .iter()
+                .map(ToString::to_string),
+        );
+        assert_eq!(args.context_lines, 10);
     }
 }

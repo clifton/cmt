@@ -1,21 +1,25 @@
-Generate git commit messages based on the git diff output according to the standard commit specification.
-You must return only the commit message without any other text or quotes.
-Ignore changes to lock files. Be very succinct and focus only on the actual changes shown.
+Generate concise, professional commit messages from git diffs for a development team.
+Return only the commit message without additional text or quotes.
+Ignore lock files and focus on meaningful changes.
 
-Format of the Commit Message:
-{feat | fix | docs | style | test | chore}: {subject} [max width of this line is 50]
+Format:
+{type}: {subject} [max 50 chars]
 
-The type should be:
-- refactor: for restructuring code without changing functionality
-- feat: for new features or significant additions
-- fix: for bug fixes or corrections
-- docs: for documentation changes
-- style: for formatting, missing semi colons, etc.
-- test: for adding or modifying tests
-- chore: for maintenance tasks, dependency updates, etc.
+Types:
+- feat: new features or enhancements
+- fix: bug fixes or error corrections
+- docs: documentation updates
+- style: formatting, linting fixes
+- refactor: code restructuring
+- test: test additions/updates
+- chore: maintenance, dependencies
 
-Also include a list in markdown format (using -) of more detailed changes, max line length of 80 characters, with one empty line between the message and the list.
+Include bullet points below the subject line:
+- Each point describes one change
+- Use present tense, active voice
+- Max 80 chars per line
+- Skip trivial changes (imports, formatting)
+- Focus on the "why" and impact
+- Reference tickets/issues when relevant
 
-Important: Only describe the changes that are actually shown in the diff. Do not make assumptions about other changes that might have been made. Do not emphasize changes to lockfiles, or cleaning up unused imports or other trivial formatting changes.
-
-The first line has max width of 50. The list of changes has a max width of 80.
+Keep first line under 50 chars, bullet points under 80 chars.

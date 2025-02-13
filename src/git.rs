@@ -1,8 +1,32 @@
 use colored::*;
-use git2::{DiffLineType, Error as GitError, Repository};
+use git2::{Error as GitError, Repository, Sort};
 
-pub fn get_staged_changes(repo: &Repository) -> Result<String, GitError> {
+pub fn get_recent_commits(repo: &Repository, count: usize) -> Result<String, GitError> {
+    let mut revwalk = repo.revwalk()?;
+    revwalk.set_sorting(Sort::TIME)?;
+    revwalk.push_head()?;
+
+    let mut commit_messages = String::new();
+
+    for (i, oid) in revwalk.take(count).enumerate() {
+        if let Ok(oid) = oid {
+            if let Ok(commit) = repo.find_commit(oid) {
+                commit_messages.push_str(&format!(
+                    "[{}] {}\n",
+                    i + 1,
+                    commit.message().unwrap_or("")
+                ));
+            }
+        }
+    }
+
+    Ok(commit_messages)
+}
+
+pub fn get_staged_changes(repo: &Repository, context_lines: u32) -> Result<String, GitError> {
     let mut opts = git2::DiffOptions::new();
+    opts.context_lines(context_lines);
+
     let tree = match repo.head().and_then(|head| head.peel_to_tree()) {
         Ok(tree) => tree,
         Err(_) => {
@@ -18,19 +42,22 @@ pub fn get_staged_changes(repo: &Repository) -> Result<String, GitError> {
         .diff_tree_to_index(Some(&tree), None, Some(&mut opts))
         .map_err(|e| GitError::from_str(&format!("Failed to get repository diff: {}", e)))?;
 
-    let mut diff_output = Vec::new();
+    let mut diff_str = String::new();
     diff.print(git2::DiffFormat::Patch, |_, _, line| {
-        match line.origin_value() {
-            DiffLineType::Addition | DiffLineType::Deletion | DiffLineType::Context => {
-                diff_output.extend_from_slice(line.content());
+        match line.origin() {
+            '+' | '-' | ' ' => {
+                // Preserve the prefix character for additions, deletions, and context
+                diff_str.push(line.origin());
+                diff_str.push_str(std::str::from_utf8(line.content()).unwrap_or(""));
             }
-            _ => {}
+            _ => {
+                // For headers and other lines, just add the content
+                diff_str.push_str(std::str::from_utf8(line.content()).unwrap_or(""));
+            }
         }
         true
     })
     .map_err(|e| GitError::from_str(&format!("Failed to format diff: {}", e)))?;
-
-    let diff_str = String::from_utf8_lossy(&diff_output).to_string();
 
     if diff_str.is_empty() {
         Err(GitError::from_str("No changes have been staged for commit"))
@@ -44,7 +71,7 @@ fn has_unstaged_changes(repo: &Repository) -> Result<bool, GitError> {
     Ok(diff.stats()?.files_changed() > 0)
 }
 
-pub fn show_git_diff(repo: &Repository) -> Result<(), Box<dyn std::error::Error>> {
+pub fn git_staged_changes(repo: &Repository) -> Result<(), Box<dyn std::error::Error>> {
     let mut opts = git2::DiffOptions::new();
     let tree = match repo.head().and_then(|head| head.peel_to_tree()) {
         Ok(tree) => tree,
@@ -63,29 +90,16 @@ pub fn show_git_diff(repo: &Repository) -> Result<(), Box<dyn std::error::Error>
 
     let stats = diff.stats()?;
 
-    println!("\n{}", "Staged Changes:".blue().bold());
+    println!("\n{}", "Diff Statistics:".blue().bold());
 
     // Print the summary with colors
     let insertions = stats.insertions();
     let deletions = stats.deletions();
     println!(
-        "{} file{} changed, {} insertion{}, {} deletion{}",
+        "{} files changed, {}(+) insertions, {}(-) deletions",
         stats.files_changed(),
-        if stats.files_changed() == 1 { "" } else { "s" },
-        format!(
-            "{}{}",
-            insertions,
-            if insertions == 1 { "(+)" } else { "(+)" }
-        )
-        .green(),
-        if insertions == 1 { "" } else { "s" },
-        format!(
-            "{}{}",
-            deletions,
-            if deletions == 1 { "(-)" } else { "(-)" }
-        )
-        .red(),
-        if deletions == 1 { "" } else { "s" }
+        format!("{}", insertions).green(),
+        format!("{}", deletions).red(),
     );
 
     // Print the per-file changes with visualization
@@ -94,20 +108,44 @@ pub fn show_git_diff(repo: &Repository) -> Result<(), Box<dyn std::error::Error>
     format_opts.insert(git2::DiffStatsFormat::INCLUDE_SUMMARY);
     let changes_buf = stats.to_buf(format_opts, 80)?;
 
+    // Find the longest filename for alignment
     let changes_str = String::from_utf8_lossy(&changes_buf);
+    let max_filename_len = changes_str
+        .lines()
+        .filter(|line| line.contains('|'))
+        .map(|line| line.splitn(2, '|').next().unwrap_or("").trim().len())
+        .max()
+        .unwrap_or(0);
+
+    // Print aligned file changes
     for line in changes_str.lines() {
         if line.contains('|') {
             let parts: Vec<&str> = line.splitn(2, '|').collect();
             if parts.len() == 2 {
                 let (file, changes) = (parts[0].trim(), parts[1].trim());
                 let count = changes.chars().filter(|&c| c == '+' || c == '-').count();
-                println!(
-                    "{} | {} {}{}",
+
+                // Extract the numeric count from the beginning of changes
+                let num_count = changes.split_whitespace().next().unwrap_or("0");
+
+                // Print the plus/minus visualization with colors
+                print!(
+                    "{:<width$} | {:>3} {:>3} ",
                     file,
                     count,
-                    changes.green(),
-                    "-".repeat(47_usize.saturating_sub(count))
+                    num_count,
+                    width = max_filename_len
                 );
+
+                // Print each character with appropriate color
+                for c in changes.chars().filter(|&c| c == '+' || c == '-') {
+                    if c == '+' {
+                        print!("{}", c.to_string().green());
+                    } else {
+                        print!("{}", c.to_string().red());
+                    }
+                }
+                println!();
             }
         }
     }
@@ -176,7 +214,7 @@ mod tests {
     #[test]
     fn test_get_staged_changes_empty_repo() {
         let (_temp_dir, repo) = setup_test_repo();
-        let result = get_staged_changes(&repo);
+        let result = get_staged_changes(&repo, 0);
         assert!(result.is_err());
         assert_eq!(
             result.unwrap_err().message(),
@@ -191,7 +229,7 @@ mod tests {
         // Create and stage a new file
         create_and_stage_file(&repo, "test.txt", "Hello, World!");
 
-        let changes = get_staged_changes(&repo).unwrap();
+        let changes = get_staged_changes(&repo, 0).unwrap();
         assert!(changes.contains("Hello, World!"));
     }
 
@@ -206,7 +244,7 @@ mod tests {
         // Modify and stage the file
         create_and_stage_file(&repo, "test.txt", "Modified content");
 
-        let changes = get_staged_changes(&repo).unwrap();
+        let changes = get_staged_changes(&repo, 0).unwrap();
         assert!(changes.contains("Initial content"));
         assert!(changes.contains("Modified content"));
     }
@@ -248,7 +286,7 @@ mod tests {
         create_and_stage_file(&repo, "new-staged.txt", "New staged content");
 
         // Should succeed and include warning about unstaged changes
-        let result = show_git_diff(&repo);
+        let result = git_staged_changes(&repo);
         assert!(result.is_ok());
     }
 }

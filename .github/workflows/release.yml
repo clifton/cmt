@@ -40,34 +40,6 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Build Changelog
-        id: build_changelog
-        uses: mikepenz/release-changelog-builder-action@v5
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        with:
-          mode: COMMIT
-          configurationJson: |
-            {
-              "template": "# What's Changed\n\n#{{UNCATEGORIZED}}",
-              "base_branches": ["main"],
-              "pr_template": "* #{{TITLE}}",
-              "commit_template": "* #{{TITLE}} ([#{{HASH_7}}](https://github.com/clifton/cmt/commit/{{HASH}}))",
-              "empty_template": "* No changes",
-              "trim_values": true,
-              "sort": "DESC",
-              "transformers": [
-                {
-                  "pattern": "^bump version to.*$",
-                  "target": ""
-                },
-                {
-                  "pattern": "\\n+",
-                  "target": "\n"
-                }
-              ]
-            }
-
       - name: Build binary
         uses: houseabsolute/actions-rust-cross@v1
         with:
@@ -88,8 +60,7 @@ jobs:
       - name: Upload Release Asset
         uses: softprops/action-gh-release@v2
         with:
-          body: ${{ steps.build_changelog.outputs.changelog }}
-          generate_release_notes: false
+          generate_release_notes: true
           files: ${{ matrix.asset_name }}
           draft: false
           prerelease: false

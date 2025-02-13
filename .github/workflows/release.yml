@@ -46,10 +46,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          mode: COMMIT
+          mode: HYBRID
           configurationJson: |
             {
-              "template": "# What's Changed\n\n{{UNCATEGORIZED}}",
+              "template": "# What's Changed\n\n#{{UNCATEGORIZED}}",
               "base_branches": ["main"],
               "pr_template": "* {{TITLE}} (#{{NUMBER}})",
               "commit_template": "* {{TITLE}} ([{{HASH_7}}](https://github.com/clifton/cmt/commit/{{HASH}}))",

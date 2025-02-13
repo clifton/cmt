@@ -71,6 +71,12 @@ jobs:
               "commit_template": "- #{{TITLE}} (#{{HASH_7}})",
               "pr_template": "- #{{TITLE}} (#{{NUMBER}})",
               "empty_template": "- No changes",
+              "transformers": [
+                {
+                  "pattern": "\\b\\(0\\)\\b",
+                  "target": ""
+                },
+              ],
               "label_extractor": [
                 {
                   "pattern": "(.) (.+)",

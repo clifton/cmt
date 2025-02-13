@@ -49,6 +49,7 @@ jobs:
           mode: HYBRID
           configurationJson: |
             {
+              "template": "#{{CHANGELOG}}\n\n## Other\n#{{UNCATEGORIZED}}",
               "categories": [
                 {
                   "title": "## ✨ Features",
@@ -67,8 +68,7 @@ jobs:
                   "labels": ["chore", "dependencies"]
                 }
               ],
-              "template": "#{{CHANGELOG}}\n\n## Other\n#{{UNCATEGORIZED}}",
-              "pr_template": "- {{TITLE}} (#{{NUMBER}})",
+              "pr_template": "- #{{TITLE}} (#{{NUMBER}})",
               "empty_template": "- No changes",
               "label_extractor": [
                 {
@@ -91,33 +91,7 @@ jobs:
               "max_pull_requests": 200,
               "max_back_track_time_days": 90,
               "exclude_merge_branches": ["main"],
-              "sort": "DESC",
-              "template_labels": [
-                {
-                  "label": "feature",
-                  "on_property": "title",
-                  "use_raw": true,
-                  "pattern": "^feat:.*"
-                },
-                {
-                  "label": "fix",
-                  "on_property": "title",
-                  "use_raw": true,
-                  "pattern": "^fix:.*"
-                },
-                {
-                  "label": "documentation",
-                  "on_property": "title",
-                  "use_raw": true,
-                  "pattern": "^docs:.*"
-                },
-                {
-                  "label": "chore",
-                  "on_property": "title",
-                  "use_raw": true,
-                  "pattern": "^chore:.*"
-                }
-              ]
+              "sort": "DESC"
             }
 
       - name: Build binary

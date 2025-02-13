@@ -1,6 +1,12 @@
 #!/bin/sh
 set -e
 
+# Check for uncommitted changes
+if ! git diff-index --quiet HEAD -- || ! git diff --staged --quiet; then
+    echo "Error: Working directory is not clean. Please commit or stash your changes first."
+    exit 1
+fi
+
 # Default to patch if no argument provided
 BUMP_TYPE=${1:-patch}
 
@@ -57,4 +63,21 @@ git commit -m "bump version to $NEW_VERSION"
 git tag -a "v$NEW_VERSION" -m "Version $NEW_VERSION"
 
 echo "Successfully bumped version to $NEW_VERSION"
-echo "Run 'git push && git push --tags' to publish the release"
+
+# Ask for confirmation before pushing to git
+read -p "Would you like to push the changes and tags to git? (y/N) " should_push
+if [ "$should_push" = "y" ] || [ "$should_push" = "Y" ]; then
+    git push && git push --tags
+    echo "Successfully pushed changes to git"
+else
+    echo "Skipped pushing to git"
+fi
+
+# Ask for confirmation before publishing to crates.io
+read -p "Would you like to publish to crates.io? (y/N) " should_publish
+if [ "$should_publish" = "y" ] || [ "$should_publish" = "Y" ]; then
+    cargo publish
+    echo "Successfully published to crates.io"
+else
+    echo "Skipped publishing to crates.io"
+fi

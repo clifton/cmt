@@ -208,7 +208,7 @@ checksum = "f46ad14479a25103f283c0f10005961cf086d8dc42205bb44c46ac563475dca6"
 
 [[package]]
 name = "cmt"
-version = "0.3.15"
+version = "0.3.16"
 dependencies = [
  "clap",
  "colored 3.0.0",

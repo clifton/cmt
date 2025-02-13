@@ -46,7 +46,78 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          mode: HYBRID
+          configurationJson: |
+            {
+              "categories": [
+                {
+                  "title": "## ✨ Features",
+                  "labels": ["feature", "enhancement", "feat"]
+                },
+                {
+                  "title": "## 🐛 Fixes",
+                  "labels": ["fix", "bug"]
+                },
+                {
+                  "title": "## 📝 Documentation",
+                  "labels": ["documentation", "docs"]
+                },
+                {
+                  "title": "## 🔨 Maintenance",
+                  "labels": ["chore", "dependencies"]
+                }
+              ],
+              "template": "#{{CHANGELOG}}\n\n## Other\n#{{UNCATEGORIZED}}",
+              "pr_template": "- {{TITLE}} (#{{NUMBER}})",
+              "empty_template": "- No changes",
+              "label_extractor": [
+                {
+                  "pattern": "(.) (.+)",
+                  "target": "$1",
+                  "flags": "gu"
+                }
+              ],
+              "transformers": [
+                {
+                  "pattern": "^bump version.*$",
+                  "target": ""
+                },
+                {
+                  "pattern": "PR: #[0-9]+",
+                  "target": ""
+                }
+              ],
+              "max_tags_to_fetch": 200,
+              "max_pull_requests": 200,
+              "max_back_track_time_days": 90,
+              "exclude_merge_branches": ["main"],
+              "sort": "DESC",
+              "template_labels": [
+                {
+                  "label": "feature",
+                  "on_property": "title",
+                  "use_raw": true,
+                  "pattern": "^feat:.*"
+                },
+                {
+                  "label": "fix",
+                  "on_property": "title",
+                  "use_raw": true,
+                  "pattern": "^fix:.*"
+                },
+                {
+                  "label": "documentation",
+                  "on_property": "title",
+                  "use_raw": true,
+                  "pattern": "^docs:.*"
+                },
+                {
+                  "label": "chore",
+                  "on_property": "title",
+                  "use_raw": true,
+                  "pattern": "^chore:.*"
+                }
+              ]
+            }
 
       - name: Build binary
         uses: houseabsolute/actions-rust-cross@v1

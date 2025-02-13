@@ -33,6 +33,13 @@ if [ -z "$CURRENT_VERSION" ]; then
     exit 1
 fi
 
+# Pull latest changes from remote
+echo "Pulling latest changes from remote..."
+if ! git pull; then
+    echo "Error: Failed to pull latest changes"
+    exit 1
+fi
+
 # Split version into major, minor, and patch numbers
 MAJOR=$(echo "$CURRENT_VERSION" | cut -d. -f1)
 MINOR=$(echo "$CURRENT_VERSION" | cut -d. -f2)

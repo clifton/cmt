@@ -1,5 +1,27 @@
 use colored::*;
-use git2::{Error as GitError, Repository};
+use git2::{Error as GitError, Repository, Sort};
+
+pub fn get_recent_commits(repo: &Repository, count: usize) -> Result<String, GitError> {
+    let mut revwalk = repo.revwalk()?;
+    revwalk.set_sorting(Sort::TIME)?;
+    revwalk.push_head()?;
+
+    let mut commit_messages = String::new();
+
+    for (i, oid) in revwalk.take(count).enumerate() {
+        if let Ok(oid) = oid {
+            if let Ok(commit) = repo.find_commit(oid) {
+                commit_messages.push_str(&format!(
+                    "[{}] {}\n",
+                    i + 1,
+                    commit.message().unwrap_or("")
+                ));
+            }
+        }
+    }
+
+    Ok(commit_messages)
+}
 
 pub fn get_staged_changes(repo: &Repository, context_lines: u32) -> Result<String, GitError> {
     let mut opts = git2::DiffOptions::new();

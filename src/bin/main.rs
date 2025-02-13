@@ -34,6 +34,18 @@ fn main() {
         }
     };
 
+    let recent_commits = match cmt::get_recent_commits(&repo, 5) {
+        Ok(commits) => commits,
+        Err(e) => {
+            eprintln!(
+                "{}",
+                "Warning: Failed to get recent commits:".yellow().bold()
+            );
+            eprintln!("{}", e);
+            String::new()
+        }
+    };
+
     if args.show_raw_diff {
         println!("\n{}", "Raw Git Diff:".blue().bold());
         println!();
@@ -55,10 +67,21 @@ fn main() {
                 println!(" {}", line); // Add space for lines without prefix
             }
         }
+
+        if !recent_commits.is_empty() {
+            println!("\n{}", "Recent Commits:".blue().bold());
+            for line in recent_commits.lines() {
+                if line.starts_with("[") && line.contains("]") {
+                    println!("{}", line.yellow());
+                } else {
+                    println!("{}", line);
+                }
+            }
+        }
         println!();
     }
 
-    match generate_commit_message(&staged_changes, &args) {
+    match generate_commit_message(&staged_changes, &recent_commits, &args) {
         Ok(commit_message) => {
             if args.message_only {
                 // When used with git commit -F, only output the message

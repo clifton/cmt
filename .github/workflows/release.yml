@@ -46,7 +46,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          mode: HYBRID
+          mode: COMMIT
           configurationJson: |
             {
               "template": "# What's Changed\n\n#{{UNCATEGORIZED}}",
@@ -57,6 +57,10 @@ jobs:
               "trim_values": true,
               "sort": "DESC",
               "transformers": [
+                {
+                  "pattern": "^bump version to.*$",
+                  "target": ""
+                },
                 {
                   "pattern": "\\n+",
                   "target": "\n"

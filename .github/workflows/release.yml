@@ -49,7 +49,7 @@ jobs:
           mode: HYBRID
           configurationJson: |
             {
-              "template": "# What's Changed\n\n{{CHANGES}}",
+              "template": "# What's Changed\n\n{{CHANGELOG}}",
               "base_branches": ["main"],
               "pr_template": "* {{TITLE}} (#{{NUMBER}})",
               "commit_template": "* {{TITLE}} ([`{{HASH_7}}`](https://github.com/clifton/cmt/commit/{{HASH}}))",

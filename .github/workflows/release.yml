@@ -13,7 +13,8 @@ env:
   BINARY_NAME: cmt
 
 jobs:
-  build-and-release:
+  release:
+    name: Build and Release
     strategy:
       matrix:
         include:
@@ -45,14 +46,10 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
+          mode: HYBRID
           configurationJson: |
             {
-              "template": "# Changelog\n\n#{{CHANGELOG}}\n\n<details>\n<summary>Uncategorized</summary>\n\n#{{UNCATEGORIZED}}\n</details>",
-              "categories": [
-                { "title": "## 🚀 Features", "labels": ["feature", "enhancement"] },
-                { "title": "## 🐛 Bug Fixes", "labels": ["bug", "fix"] },
-                { "title": "## 📦 Dependencies", "labels": ["dependencies"] }
-              ]
+              "template": "# What's Changed\n\n#{{UNCATEGORIZED}}"
             }
 
       - name: Build binary
@@ -63,6 +60,15 @@ jobs:
           args: "--release"
           strip: true
 
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v2
+        with:
+          body: ${{ steps.build_changelog.outputs.changelog }}
+          files: ${{ matrix.asset_name }}
+          draft: false
+          prerelease: false
+          make_latest: true
+
       - name: Prepare asset
         shell: bash
         run: |
@@ -71,13 +77,3 @@ jobs:
           else
             cp target/${{ matrix.target }}/release/${{ env.BINARY_NAME }} ${{ matrix.asset_name }}
           fi
-
-      - name: Upload binaries to release
-        uses: softprops/action-gh-release@v2
-        with:
-          body: ${{ steps.build_changelog.outputs.changelog }}
-          generate_release_notes: false
-          files: ${{ matrix.asset_name }}
-          draft: false
-          prerelease: false
-          make_latest: true

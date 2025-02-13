@@ -1,7 +1,10 @@
-Generate a concise and descriptive git commit message for the following git diff:
+Generate a professional commit message for this diff that clearly explains the changes to your team:
 
 {}
 
-The commit message should be in the present tense, be specific but concise, and follow best practices. Format the response as a commit message without quotes or prefixes.
-
-The first line of the commit must not be longer than 50 characters.
+Requirements:
+- First line must be under 50 characters
+- Use conventional commit format (type: subject)
+- Include bullet points for important details
+- Focus on the impact and reasoning
+- Skip trivial changes

@@ -68,6 +68,7 @@ jobs:
                   "labels": ["chore", "dependencies"]
                 }
               ],
+              "commit_template": "- #{{TITLE}} (#{{HASH_7}})",
               "pr_template": "- #{{TITLE}} (#{{NUMBER}})",
               "empty_template": "- No changes",
               "label_extractor": [
@@ -75,16 +76,6 @@ jobs:
                   "pattern": "(.) (.+)",
                   "target": "$1",
                   "flags": "gu"
-                }
-              ],
-              "transformers": [
-                {
-                  "pattern": "^bump version.*$",
-                  "target": ""
-                },
-                {
-                  "pattern": "PR: #[0-9]+",
-                  "target": ""
                 }
               ],
               "max_tags_to_fetch": 200,

@@ -40,20 +40,9 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Generate commit list
-        id: commits
-        run: |
-          PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
-          if [ -z "$PREVIOUS_TAG" ]; then
-            # If no previous tag exists, get all commits
-            COMMITS=$(git log --pretty=format:"* %s (%h)" --reverse)
-          else
-            # Get commits since the last tag
-            COMMITS=$(git log --pretty=format:"* %s (%h)" ${PREVIOUS_TAG}..HEAD --reverse)
-          fi
-          echo "commits<<EOF" >> $GITHUB_OUTPUT
-          echo "$COMMITS" >> $GITHUB_OUTPUT
-          echo "EOF" >> $GITHUB_OUTPUT
+      - name: "Build Changelog"
+        id: build_changelog
+        uses: mikepenz/release-changelog-builder-action@v5
 
       - name: Build binary
         uses: houseabsolute/actions-rust-cross@v1
@@ -76,8 +65,7 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
-          body: |
-            ${{ steps.commits.outputs.commits }}
+          body: ${{ steps.build_changelog.outputs.changelog }}
           files: ${{ matrix.asset_name }}
           draft: false
           prerelease: false

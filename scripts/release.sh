@@ -81,7 +81,7 @@ echo "Successfully bumped version to $NEW_VERSION"
 # Ask for confirmation before pushing to git
 read -p "Would you like to push the changes and tags to git? (y/N) " should_push
 if [ "$should_push" = "y" ] || [ "$should_push" = "Y" ]; then
-    git push && git push --tags
+    git push && git push origin "v$NEW_VERSION"
     echo "Successfully pushed changes to git"
 else
     echo "Skipped pushing to git"

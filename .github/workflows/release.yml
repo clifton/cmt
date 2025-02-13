@@ -60,15 +60,6 @@ jobs:
           args: "--release"
           strip: true
 
-      - name: Upload Release Asset
-        uses: softprops/action-gh-release@v2
-        with:
-          body: ${{ steps.build_changelog.outputs.changelog }}
-          files: ${{ matrix.asset_name }}
-          draft: false
-          prerelease: false
-          make_latest: true
-
       - name: Prepare asset
         shell: bash
         run: |
@@ -77,3 +68,13 @@ jobs:
           else
             cp target/${{ matrix.target }}/release/${{ env.BINARY_NAME }} ${{ matrix.asset_name }}
           fi
+
+      - name: Upload Release Asset
+        uses: softprops/action-gh-release@v2
+        with:
+          body: ${{ steps.build_changelog.outputs.changelog }}
+          generate_release_notes: false
+          files: ${{ matrix.asset_name }}
+          draft: false
+          prerelease: false
+          make_latest: true

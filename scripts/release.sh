@@ -1,6 +1,13 @@
 #!/bin/sh
 set -e
 
+# Check if we're on the main branch
+CURRENT_BRANCH=$(git branch --show-current)
+if [ "$CURRENT_BRANCH" != "main" ]; then
+    echo "Error: Must be on 'main' branch to create a release. Current branch: $CURRENT_BRANCH"
+    exit 1
+fi
+
 # Check for uncommitted changes
 if ! git diff-index --quiet HEAD -- || ! git diff --staged --quiet; then
     echo "Error: Working directory is not clean. Please commit or stash your changes first."

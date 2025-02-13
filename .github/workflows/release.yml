@@ -40,6 +40,22 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Generate commit list
+        if: matrix.os == 'ubuntu-latest' && matrix.target == 'x86_64-unknown-linux-gnu'
+        id: commits
+        run: |
+          PREVIOUS_TAG=$(git describe --tags --abbrev=0 HEAD^ 2>/dev/null || echo "")
+          if [ -z "$PREVIOUS_TAG" ]; then
+            # If no previous tag exists, get all commits
+            COMMITS=$(git log --pretty=format:"* %s (%h)" --reverse)
+          else
+            # Get commits since the last tag
+            COMMITS=$(git log --pretty=format:"* %s (%h)" ${PREVIOUS_TAG}..HEAD --reverse)
+          fi
+          echo "commits<<EOF" >> $GITHUB_OUTPUT
+          echo "$COMMITS" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
       - name: Build binary
         uses: houseabsolute/actions-rust-cross@v1
         with:
@@ -61,6 +77,8 @@ jobs:
         uses: softprops/action-gh-release@v2
         with:
           generate_release_notes: true
+          body: |
+            ${{ steps.commits.outputs.commits }}
           files: ${{ matrix.asset_name }}
           draft: false
           prerelease: false

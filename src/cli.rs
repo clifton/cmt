@@ -12,6 +12,10 @@ pub struct Args {
     #[arg(long, default_value_t = false)]
     pub no_diff_stats: bool,
 
+    /// Show the raw git diff that will be sent to the AI model
+    #[arg(long, default_value_t = false)]
+    pub show_raw_diff: bool,
+
     /// Use a specific AI model (defaults to claude-3-5-sonnet-latest or gpt-4o depending on provider)
     #[arg(long)]
     pub model: Option<String>,
@@ -52,6 +56,7 @@ mod tests {
         let args = Args::new_from(["cmt"].iter().map(ToString::to_string));
         assert!(!args.message_only);
         assert!(!args.no_diff_stats);
+        assert!(!args.show_raw_diff);
         assert!(args.model.is_none());
         assert!(!args.openai);
         assert!(args.anthropic);
@@ -153,5 +158,11 @@ mod tests {
         assert!(result.is_err());
         let err = result.unwrap_err().to_string();
         assert!(err.contains("invalid float literal"));
+    }
+
+    #[test]
+    fn test_show_raw_diff_flag() {
+        let args = Args::new_from(["cmt", "--show-raw-diff"].iter().map(ToString::to_string));
+        assert!(args.show_raw_diff);
     }
 }

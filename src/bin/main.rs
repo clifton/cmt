@@ -34,6 +34,30 @@ fn main() {
         }
     };
 
+    if args.show_raw_diff {
+        println!("\n{}", "Raw Git Diff:".blue().bold());
+        println!();
+        // Format each line to match git diff style
+        for line in staged_changes.lines() {
+            if line.starts_with("diff --git") {
+                println!("{}", line.bold());
+            } else if line.starts_with("index ") {
+                println!("{}", line.yellow());
+            } else if line.starts_with("+++") || line.starts_with("+") {
+                println!("{}", line.green());
+            } else if line.starts_with("---") || line.starts_with("-") {
+                println!("{}", line.red());
+            } else if line.starts_with("@@") {
+                println!("{}", line.cyan());
+            } else if line.starts_with(" ") {
+                println!("{}", line); // Context lines already have a space
+            } else {
+                println!(" {}", line); // Add space for lines without prefix
+            }
+        }
+        println!();
+    }
+
     match generate_commit_message(&staged_changes, &args) {
         Ok(commit_message) => {
             if args.message_only {

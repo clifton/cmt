@@ -18,19 +18,22 @@ pub fn get_staged_changes(repo: &Repository) -> Result<String, GitError> {
         .diff_tree_to_index(Some(&tree), None, Some(&mut opts))
         .map_err(|e| GitError::from_str(&format!("Failed to get repository diff: {}", e)))?;
 
-    let mut diff_output = Vec::new();
+    let mut diff_str = String::new();
     diff.print(git2::DiffFormat::Patch, |_, _, line| {
-        match line.origin_value() {
-            DiffLineType::Addition | DiffLineType::Deletion | DiffLineType::Context => {
-                diff_output.extend_from_slice(line.content());
+        match line.origin() {
+            '+' | '-' | ' ' => {
+                // Preserve the prefix character for additions, deletions, and context
+                diff_str.push(line.origin());
+                diff_str.push_str(std::str::from_utf8(line.content()).unwrap_or(""));
             }
-            _ => {}
+            _ => {
+                // For headers and other lines, just add the content
+                diff_str.push_str(std::str::from_utf8(line.content()).unwrap_or(""));
+            }
         }
         true
     })
     .map_err(|e| GitError::from_str(&format!("Failed to format diff: {}", e)))?;
-
-    let diff_str = String::from_utf8_lossy(&diff_output).to_string();
 
     if diff_str.is_empty() {
         Err(GitError::from_str("No changes have been staged for commit"))

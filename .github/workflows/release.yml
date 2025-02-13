@@ -46,7 +46,7 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
-          mode: HYBRID
+          mode: COMMIT
           configurationJson: |
             {
               "template": "#{{CHANGELOG}}\n\n## Other\n#{{UNCATEGORIZED}}",

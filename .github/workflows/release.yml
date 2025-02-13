@@ -43,6 +43,8 @@ jobs:
       - name: "Build Changelog"
         id: build_changelog
         uses: mikepenz/release-changelog-builder-action@v5
+        with:
+          mode: HYBRID
 
       - name: Build binary
         uses: houseabsolute/actions-rust-cross@v1

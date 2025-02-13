@@ -51,16 +51,12 @@ jobs:
             {
               "template": "# What's Changed\n\n#{{UNCATEGORIZED}}",
               "base_branches": ["main"],
-              "pr_template": "* {{TITLE}} (#{{NUMBER}})",
-              "commit_template": "* {{TITLE}} ([{{HASH_7}}](https://github.com/clifton/cmt/commit/{{HASH}}))",
+              "pr_template": "* #{{TITLE}}",
+              "commit_template": "* #{{TITLE}} ([#{{HASH_7}}](https://github.com/clifton/cmt/commit/{{HASH}}))",
               "empty_template": "* No changes",
               "trim_values": true,
               "sort": "DESC",
               "transformers": [
-                {
-                  "pattern": "PR: #[0-9]+",
-                  "target": ""
-                },
                 {
                   "pattern": "\\n+",
                   "target": "\n"

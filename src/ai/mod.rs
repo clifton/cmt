@@ -48,7 +48,7 @@ mod tests {
             "test-model",
             0.3,
             &expected_system_prompt,
-            &USER_PROMPT_TEMPLATE.replace("{}", changes),
+            &USER_PROMPT_TEMPLATE.replace("{{changes}}", changes),
         );
 
         assert!(result.is_ok());
@@ -92,7 +92,7 @@ mod tests {
             "test-model",
             0.3,
             &format!("{}\n\nAdditional context: {}", SYSTEM_PROMPT, hint),
-            &USER_PROMPT_TEMPLATE.replace("{}", changes),
+            &USER_PROMPT_TEMPLATE.replace("{{changes}}", changes),
         );
         assert!(result.is_ok(), "Failed to generate commit message");
     }

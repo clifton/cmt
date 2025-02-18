@@ -8,10 +8,7 @@
   - Anthropic's Claude 3.5 Sonnet (default, temperature 0.3)
   - OpenAI's GPT-4 Optimized (temperature 1.0)
 - 📝 Follows conventional commit format (`type: subject`)
-- 📊 Built-in diff statistics (can be disabled)
 - 💡 Contextual hints to guide message generation
-- ⚙️ Configurable AI model and parameters
-- 🔑 Supports environment variables for API keys
 
 ## Installation
 

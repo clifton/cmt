@@ -2,7 +2,7 @@
 name = "cmt"
 version = "0.3.33"
 edition = "2021"
-description = "A CLI tool that generates commit messages using OpenAI or Anthropic Claude"
+description = "CLI tool that generates commit messages using AI"
 authors = ["Clifton King <cliftonk@gmail.com>"]
 license = "MIT"
 repository = "https://github.com/cliftonk/cmt"

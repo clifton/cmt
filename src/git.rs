@@ -27,6 +27,7 @@ pub fn get_staged_changes(
     repo: &Repository,
     context_lines: u32,
     max_lines_per_file: usize,
+    max_line_width: usize,
 ) -> Result<String, GitError> {
     let mut opts = git2::DiffOptions::new();
     opts.context_lines(context_lines);
@@ -64,7 +65,13 @@ pub fn get_staged_changes(
                 '+' | '-' | ' ' => {
                     // Preserve the prefix character for additions, deletions, and context
                     diff_str.push(line.origin());
-                    diff_str.push_str(std::str::from_utf8(line.content()).unwrap_or(""));
+                    let line_content = std::str::from_utf8(line.content()).unwrap_or("binary");
+                    if line_content.len() > max_line_width {
+                        diff_str.push_str(&line_content[..max_line_width]);
+                        diff_str.push_str("...");
+                    } else {
+                        diff_str.push_str(line_content);
+                    }
                     line_count += 1; // Increment line count only for content lines
                 }
                 _ => {
@@ -235,7 +242,7 @@ mod tests {
     #[test]
     fn test_get_staged_changes_empty_repo() {
         let (_temp_dir, repo) = setup_test_repo();
-        let result = get_staged_changes(&repo, 0, 100);
+        let result = get_staged_changes(&repo, 0, 100, 300);
         assert!(result.is_err());
         assert_eq!(
             result.unwrap_err().message(),
@@ -250,7 +257,7 @@ mod tests {
         // Create and stage a new file
         create_and_stage_file(&repo, "test.txt", "Hello, World!");
 
-        let changes = get_staged_changes(&repo, 0, 100).unwrap();
+        let changes = get_staged_changes(&repo, 0, 100, 300).unwrap();
         assert!(changes.contains("Hello, World!"));
     }
 
@@ -265,7 +272,7 @@ mod tests {
         // Modify and stage the file
         create_and_stage_file(&repo, "test.txt", "Modified content");
 
-        let changes = get_staged_changes(&repo, 0, 100).unwrap();
+        let changes = get_staged_changes(&repo, 0, 100, 300).unwrap();
         assert!(changes.contains("Initial content"));
         assert!(changes.contains("Modified content"));
     }
@@ -321,7 +328,7 @@ mod tests {
         // Create and stage a regular file
         create_and_stage_file(&repo, "test.txt", "This is a regular file.");
 
-        let changes = get_staged_changes(&repo, 0, 100).unwrap();
+        let changes = get_staged_changes(&repo, 0, 100, 300).unwrap();
 
         // Assert that the .lock file content is not in the diff
         assert!(!changes.contains("This is a lock file."));
@@ -343,7 +350,7 @@ mod tests {
 
         // Set max_lines_per_file to 10 for testing
         let max_lines_per_file = 10;
-        let changes = get_staged_changes(&repo, 0, max_lines_per_file).unwrap();
+        let changes = get_staged_changes(&repo, 0, max_lines_per_file, 300).unwrap();
 
         // Assert that the diff output does not exceed the max_lines_per_file limit
         // Allow extra lines for headers and metadata
@@ -353,5 +360,22 @@ mod tests {
         assert!(changes.contains("[Note: Diff output truncated to max lines per file.]"));
         assert!(changes.contains(&format!("+Line {}", max_lines_per_file - 1)));
         assert!(!changes.contains(&format!("+Line {}", max_lines_per_file)));
+    }
+
+    #[test]
+    fn test_max_line_width() {
+        let (_temp_dir, repo) = setup_test_repo();
+
+        // Create and stage a file with a long line
+        let long_line = "a".repeat(400);
+        create_and_stage_file(&repo, "test.txt", &long_line);
+
+        // Set max_line_width to 100 for testing
+        let max_line_width = 100;
+        let changes = get_staged_changes(&repo, 0, 100, max_line_width).unwrap();
+
+        // Assert that the line is truncated to max_line_width
+        assert!(changes.contains(&long_line[..max_line_width]));
+        assert!(changes.contains("..."));
     }
 }

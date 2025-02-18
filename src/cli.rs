@@ -43,6 +43,10 @@ pub struct Args {
     /// Number of maximum lines to show per file in the git diff
     #[arg(long, default_value_t = 500)]
     pub max_lines_per_file: usize,
+
+    /// Maximum line width for diffs
+    #[arg(long, default_value_t = 300)]
+    pub max_line_width: usize,
 }
 
 impl Args {

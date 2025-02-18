@@ -107,6 +107,8 @@ Options:
           Add a hint to guide the AI in generating the commit message
       --max-lines-per-file <MAX_LINES_PER_FILE>
           Number of maximum lines to show per file in the git diff [default: 500]
+      --max-line-width <MAX_LINE_WIDTH>
+          Maximum line width for diffs [default: 300]
   -h, --help
           Print help
   -V, --version

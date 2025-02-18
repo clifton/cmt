@@ -14,14 +14,15 @@ pub fn generate_commit_message(
     args: &Args,
 ) -> Result<String, Box<dyn std::error::Error>> {
     let mut prompt = String::new();
-    prompt.push_str(&prompts::USER_PROMPT_TEMPLATE.replace("{}", staged_changes));
 
     if !recent_commits.is_empty() {
         prompt.push_str("\n\nRecent commits for context:\n");
         prompt.push_str(recent_commits);
     }
 
-    let mut system_prompt = prompts::SYSTEM_PROMPT.to_string();
+    prompt.push_str(&prompts::user_prompt(staged_changes));
+
+    let mut system_prompt = prompts::system_prompt();
     if let Some(hint) = &args.hint {
         system_prompt = format!("{}\n\nAdditional context: {}", system_prompt, hint);
     }

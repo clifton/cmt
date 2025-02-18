@@ -1,10 +1,13 @@
 Generate a professional commit message for this diff that clearly explains the changes to your team:
 
-{}
+```diff
+{{changes}}
+```
 
 Requirements:
 - First line must be under 50 characters
 - Use conventional commit format (type: subject)
-- Include bullet points for important details
+- Include bullet points for important details, skip for minor changes
 - Focus on the impact and reasoning
 - Skip trivial changes
+- Doc or readme changes are not features

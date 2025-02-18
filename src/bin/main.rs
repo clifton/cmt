@@ -25,7 +25,12 @@ fn main() {
         }
     };
 
-    let staged_changes = match cmt::get_staged_changes(&repo, args.context_lines) {
+    let staged_changes = match cmt::get_staged_changes(
+        &repo,
+        args.context_lines,
+        args.max_lines_per_file,
+        args.max_line_width,
+    ) {
         Ok(changes) => changes,
         Err(e) => {
             eprintln!("{}", "Error:".red().bold());

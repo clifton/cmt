@@ -87,17 +87,30 @@ git commit -F <(cmt --message-only)
 Usage: cmt [OPTIONS]
 
 Options:
-  -m, --message-only               Only output the generated commit message, without formatting
-      --no-diff-stats             Hide the diff statistics for staged changes
-      --show-raw-diff             Show the raw git diff that will be sent to the AI model
-      --context-lines <LINES>      Number of context lines to show in the git diff (default: 12)
-      --model <MODEL>              Use a specific AI model (defaults to claude-3-5-sonnet-latest or gpt-4o depending on provider)
-      --openai                     Use OpenAI instead of Claude (which is default)
-      --anthropic                  Use Anthropic instead of OpenAI (which is default)
-  -t, --temperature <TEMPERATURE>  Adjust the creativity of the generated message (0.0 to 2.0)
-      --hint <HINT>                Add a hint to guide the AI in generating the commit message
-  -h, --help                       Print help
-  -V, --version                    Print version
+  -m, --message-only
+          Only output the generated commit message, without formatting
+      --no-diff-stats
+          Hide the diff statistics for staged changes
+      --show-raw-diff
+          Show the raw git diff that will be sent to the AI model
+      --context-lines <CONTEXT_LINES>
+          Number of context lines to show in the git diff [default: 12]
+      --model <MODEL>
+          Use a specific AI model (defaults to claude-3-5-sonnet-latest or gpt-4o depending on provider)
+      --openai
+          Use OpenAI
+      --anthropic
+          Use Anthropic (default)
+  -t, --temperature <TEMPERATURE>
+          Adjust the creativity of the generated message (0.0 to 2.0)
+      --hint <HINT>
+          Add a hint to guide the AI in generating the commit message
+      --max-lines-per-file <MAX_LINES_PER_FILE>
+          Number of maximum lines to show per file in the git diff [default: 500]
+  -h, --help
+          Print help
+  -V, --version
+          Print version
 ```
 
 ### Examples
@@ -181,3 +194,4 @@ Contributions are welcome! Please feel free to submit a Pull Request.
 ## License
 
 This project is licensed under the MIT License - see the LICENSE file for details.
+

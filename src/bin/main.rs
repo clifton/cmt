@@ -25,14 +25,15 @@ fn main() {
         }
     };
 
-    let staged_changes = match cmt::get_staged_changes(&repo, args.context_lines) {
-        Ok(changes) => changes,
-        Err(e) => {
-            eprintln!("{}", "Error:".red().bold());
-            eprintln!("{}", e);
-            process::exit(1);
-        }
-    };
+    let staged_changes =
+        match cmt::get_staged_changes(&repo, args.context_lines, args.max_lines_per_file) {
+            Ok(changes) => changes,
+            Err(e) => {
+                eprintln!("{}", "Error:".red().bold());
+                eprintln!("{}", e);
+                process::exit(1);
+            }
+        };
 
     let recent_commits = match cmt::get_recent_commits(&repo, 5) {
         Ok(commits) => commits,

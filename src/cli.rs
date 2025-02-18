@@ -16,7 +16,7 @@ pub struct Args {
     #[arg(long, default_value_t = false)]
     pub show_raw_diff: bool,
 
-    /// Number of context lines to show in the git diff (default: 12)
+    /// Number of context lines to show in the git diff
     #[arg(long, default_value_t = 12)]
     pub context_lines: u32,
 
@@ -24,11 +24,11 @@ pub struct Args {
     #[arg(long)]
     pub model: Option<String>,
 
-    /// Use OpenAI instead of Claude (which is default)
+    /// Use OpenAI
     #[arg(long)]
     pub openai: bool,
 
-    /// Use Anthropic instead of OpenAI (which is default)
+    /// Use Anthropic (default)
     #[arg(long, default_value_t = true)]
     pub anthropic: bool,
 
@@ -39,6 +39,10 @@ pub struct Args {
     /// Add a hint to guide the AI in generating the commit message
     #[arg(long)]
     pub hint: Option<String>,
+
+    /// Number of maximum lines to show per file in the git diff
+    #[arg(long, default_value_t = 500)]
+    pub max_lines_per_file: usize,
 }
 
 impl Args {

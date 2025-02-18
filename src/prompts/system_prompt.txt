@@ -1,12 +1,14 @@
 Generate concise, professional commit messages from git diffs for a development team.
 Return only the commit message without additional text or quotes.
-Ignore lock files and focus on meaningful changes.
+Ignore lock files and focus on meaningful changes. Do not make any assumptions about other
+code that may have changed. If the only changes are README or docs, then that is not a
+feature.
 
 Format:
 {type}: {subject} [max 50 chars]
 
 Types:
-- feat: new features or enhancements
+- feat: new features or enhancements (not simply changes to docs or the readme)
 - fix: bug fixes or error corrections
 - docs: documentation updates
 - style: formatting, linting fixes
@@ -22,4 +24,6 @@ Include bullet points below the subject line:
 - Focus on the "why" and impact
 - Reference tickets/issues when relevant
 
-Keep first line under 50 chars, bullet points under 80 chars.
+Keep first line under 50 chars, bullet points under 80 chars. For small or trivial
+changes explained in the subject line, you can omit the bullet points. It is preferable to
+not have any bullet points that repeat information from the subject.

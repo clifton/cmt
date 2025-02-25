@@ -1,4 +1,5 @@
-use crate::ai::{AiError, AiProvider};
+use crate::ai::{parse_commit_template_json, AiError, AiProvider};
+use crate::templates::CommitTemplate;
 use reqwest::blocking::Client;
 use serde_json::{json, Value};
 use std::{env, error::Error};
@@ -16,8 +17,9 @@ impl OpenAiProvider {
     }
 
     fn get_api_key() -> Result<String, AiError> {
-        env::var("OPENAI_API_KEY").map_err(|_| {
-            AiError::ProviderNotAvailable("OPENAI_API_KEY environment variable not set".to_string())
+        env::var("OPENAI_API_KEY").map_err(|_| AiError::ProviderNotAvailable {
+            provider_name: "openai".to_string(),
+            message: "OPENAI_API_KEY environment variable not set".to_string(),
         })
     }
 }
@@ -35,15 +37,33 @@ impl AiProvider for OpenAiProvider {
         true
     }
 
-    fn complete(
+    fn complete_structured(
         &self,
         model: &str,
         temperature: f32,
         system_prompt: &str,
         user_prompt: &str,
-    ) -> Result<String, Box<dyn Error>> {
+    ) -> Result<CommitTemplate, Box<dyn Error>> {
         let api_key = Self::get_api_key()?;
         let client = Client::new();
+
+        // Get the schema from the trait method
+        let schema = self.get_commit_template_schema();
+
+        // Extract the properties and required fields from the schema
+        let properties = schema["properties"].clone();
+        let required = schema["required"].clone();
+
+        // Define the function schema for the commit message structure
+        let function_schema = json!({
+            "name": "generate_commit_message",
+            "description": "Generate a structured commit message based on the changes",
+            "parameters": {
+                "type": "object",
+                "properties": properties,
+                "required": required
+            }
+        });
 
         let response = client
             .post(format!("{}/v1/chat/completions", Self::api_base_url()))
@@ -62,7 +82,18 @@ impl AiProvider for OpenAiProvider {
                     }
                 ],
                 "temperature": temperature,
-                "max_tokens": 100
+                "tools": [
+                    {
+                        "type": "function",
+                        "function": function_schema
+                    }
+                ],
+                "tool_choice": {
+                    "type": "function",
+                    "function": {
+                        "name": "generate_commit_message"
+                    }
+                }
             }))
             .send()
             .map_err(|e| {
@@ -78,7 +109,10 @@ impl AiProvider for OpenAiProvider {
                 } else {
                     format!("Unknown error: {}", e)
                 };
-                Box::new(AiError::ApiError(error_msg))
+                Box::new(AiError::ApiError {
+                    code: e.status().map(|s| s.as_u16()).unwrap_or(500),
+                    message: error_msg,
+                })
             })?;
 
         let status = response.status();
@@ -89,40 +123,47 @@ impl AiProvider for OpenAiProvider {
 
             // Check if this is a model-related error
             if error_text.contains("model")
-                && (status.as_u16() == 404
-                    || error_text.contains("does not exist")
-                    || error_text.contains("not found"))
+                && (status.as_u16() == 404 || error_text.contains("not found"))
             {
-                return Err(Box::new(AiError::InvalidModel(format!(
-                    "The model `{}` does not exist or you do not have access to it.",
-                    model
-                ))));
+                return Err(Box::new(AiError::InvalidModel {
+                    model: model.to_string(),
+                }));
             }
 
-            return Err(Box::new(AiError::ApiError(format!(
-                "API error (status {}): {}",
-                status, error_text
-            ))));
+            return Err(Box::new(AiError::ApiError {
+                code: status.as_u16(),
+                message: format!("API error (status {}): {}", status, error_text),
+            }));
         }
 
-        let json: Value = response
-            .json()
-            .map_err(|e| Box::new(AiError::ApiError(format!("Failed to parse JSON: {}", e))))?;
+        let json: Value = response.json().map_err(|e| {
+            Box::new(AiError::JsonError {
+                message: format!("Failed to parse JSON: {}", e),
+            })
+        })?;
 
-        if let Some(content) = json
+        // Extract the function call arguments from the response
+        let function_args = json
             .get("choices")
             .and_then(|choices| choices.as_array())
             .and_then(|choices| choices.first())
             .and_then(|choice| choice.get("message"))
-            .and_then(|message| message.get("content"))
-            .and_then(|content| content.as_str())
-        {
-            Ok(content.trim().to_string())
-        } else {
-            Err(Box::new(AiError::ApiError(
-                "Failed to extract content from response".to_string(),
-            )))
-        }
+            .and_then(|message| message.get("tool_calls"))
+            .and_then(|tool_calls| tool_calls.as_array())
+            .and_then(|tool_calls| tool_calls.first())
+            .and_then(|tool_call| tool_call.get("function"))
+            .and_then(|function| function.get("arguments"))
+            .and_then(|arguments| arguments.as_str())
+            .ok_or_else(|| {
+                Box::new(AiError::JsonError {
+                    message: "Failed to extract function arguments from response".to_string(),
+                }) as Box<dyn Error>
+            })?;
+
+        // Parse the function arguments into CommitTemplate
+        let template_data = parse_commit_template_json(function_args)?;
+
+        Ok(template_data)
     }
 
     fn default_model(&self) -> &str {
@@ -133,8 +174,9 @@ impl AiProvider for OpenAiProvider {
         crate::ai::OPENAI_DEFAULT_TEMP
     }
 
-    fn is_available(&self) -> bool {
-        Self::get_api_key().is_ok()
+    fn check_available(&self) -> Result<(), Box<dyn Error>> {
+        Self::get_api_key()?;
+        Ok(())
     }
 
     fn fetch_available_models(&self) -> Result<Vec<String>, Box<dyn Error>> {
@@ -146,22 +188,29 @@ impl AiProvider for OpenAiProvider {
             .header("Authorization", format!("Bearer {}", api_key))
             .header("Content-Type", "application/json")
             .send()
-            .map_err(|e| Box::new(AiError::ApiError(format!("Failed to fetch models: {}", e))))?;
+            .map_err(|e| {
+                Box::new(AiError::ApiError {
+                    code: e.status().map(|s| s.as_u16()).unwrap_or(500),
+                    message: format!("Failed to fetch models: {}", e),
+                })
+            })?;
 
         let status = response.status();
         if !status.is_success() {
             let error_text = response
                 .text()
                 .unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(Box::new(AiError::ApiError(format!(
-                "API error (status {}): {}",
-                status, error_text
-            ))));
+            return Err(Box::new(AiError::ApiError {
+                code: status.as_u16(),
+                message: format!("API error (status {}): {}", status, error_text),
+            }));
         }
 
-        let json: Value = response
-            .json()
-            .map_err(|e| Box::new(AiError::ApiError(format!("Failed to parse JSON: {}", e))))?;
+        let json: Value = response.json().map_err(|e| {
+            Box::new(AiError::JsonError {
+                message: format!("Failed to parse JSON: {}", e),
+            })
+        })?;
 
         let models = json
             .get("data")
@@ -192,6 +241,7 @@ impl AiProvider for OpenAiProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::templates::CommitType;
     use mockito::Server;
     use serial_test::serial;
 
@@ -216,7 +266,14 @@ mod tests {
                 "choices": [
                     {
                         "message": {
-                            "content": "feat: add new feature\n\n- Implement cool functionality\n- Update tests"
+                            "tool_calls": [
+                                {
+                                    "function": {
+                                        "name": "generate_commit_message",
+                                        "arguments": "{\"type\": \"feat\", \"subject\": \"add new feature\", \"details\": \"- Implement cool functionality\\n- Update tests\", \"issues\": null, \"breaking\": null, \"scope\": null}"
+                                    }
+                                }
+                            ]
                         }
                     }
                 ]
@@ -225,11 +282,16 @@ mod tests {
             .create();
 
         let provider = OpenAiProvider::new();
-        let result = provider.complete("gpt-4o", 1.0, "test system prompt", "test user prompt");
+        let result =
+            provider.complete_structured("gpt-4o", 1.0, "test system prompt", "test user prompt");
         assert!(result.is_ok());
         let message = result.unwrap();
-        assert!(message.contains("feat: add new feature"));
-        assert!(message.contains("Implement cool functionality"));
+        assert_eq!(message.r#type, CommitType::Feat);
+        assert_eq!(message.subject, "add new feature");
+        assert_eq!(
+            message.details,
+            Some("- Implement cool functionality\n- Update tests".to_string())
+        );
 
         mock.assert();
     }
@@ -253,7 +315,8 @@ mod tests {
             .create();
 
         let provider = OpenAiProvider::new();
-        let result = provider.complete("gpt-4o", 1.0, "test system prompt", "test user prompt");
+        let result =
+            provider.complete_structured("gpt-4o", 1.0, "test system prompt", "test user prompt");
         assert!(result.is_err());
         let error = result.unwrap_err().to_string();
         assert!(error.contains("Invalid request parameters"));
@@ -275,7 +338,14 @@ mod tests {
                 "choices": [
                     {
                         "message": {
-                            "content": "test commit message"
+                            "tool_calls": [
+                                {
+                                    "function": {
+                                        "name": "generate_commit_message",
+                                        "arguments": "{\"type\": \"test\", \"subject\": \"test commit message\", \"details\": null, \"issues\": null, \"breaking\": null, \"scope\": null}"
+                                    }
+                                }
+                            ]
                         }
                     }
                 ]
@@ -284,7 +354,7 @@ mod tests {
             .create();
 
         let provider = OpenAiProvider::new();
-        let result = provider.complete(
+        let result = provider.complete_structured(
             "custom-model",
             0.5,
             "test system prompt",
@@ -292,7 +362,8 @@ mod tests {
         );
         assert!(result.is_ok());
         let message = result.unwrap();
-        assert_eq!(message, "test commit message");
+        assert_eq!(message.r#type, CommitType::Test);
+        assert_eq!(message.subject, "test commit message");
 
         mock.assert();
     }
@@ -335,7 +406,7 @@ mod tests {
             .create();
 
         let provider = OpenAiProvider::new();
-        let result = provider.complete(
+        let result = provider.complete_structured(
             "invalid-model-name",
             1.0,
             "test system prompt",
@@ -345,10 +416,17 @@ mod tests {
         // Verify that an error is returned
         assert!(result.is_err());
 
-        // Check that the error message contains the expected text
-        let error = result.unwrap_err().to_string();
-        assert!(error.contains("does not exist"));
-        assert!(error.contains("invalid-model-name"));
+        // Check that the error is an InvalidModel error
+        let error = result.unwrap_err();
+        let error_string = error.to_string();
+        assert!(error_string.contains("invalid-model-name"));
+
+        // Downcast the error to check if it's an InvalidModel error
+        let is_invalid_model = error
+            .downcast_ref::<AiError>()
+            .map(|e| matches!(e, AiError::InvalidModel { .. }))
+            .unwrap_or(false);
+        assert!(is_invalid_model, "Expected InvalidModel error");
 
         // Test that fetch_available_models returns the expected models
         let models = provider.fetch_available_models().unwrap();

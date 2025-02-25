@@ -1,4 +1,5 @@
-use crate::ai::{AiError, AiProvider};
+use crate::ai::{parse_commit_template_json, AiError, AiProvider};
+use crate::templates::CommitTemplate;
 use reqwest::blocking::Client;
 use serde_json::{json, Value};
 use std::{env, error::Error};
@@ -16,10 +17,9 @@ impl ClaudeProvider {
     }
 
     fn get_api_key() -> Result<String, AiError> {
-        env::var("ANTHROPIC_API_KEY").map_err(|_| {
-            AiError::ProviderNotAvailable(
-                "ANTHROPIC_API_KEY environment variable not set".to_string(),
-            )
+        env::var("ANTHROPIC_API_KEY").map_err(|_| AiError::ProviderNotAvailable {
+            provider_name: "claude".to_string(),
+            message: "ANTHROPIC_API_KEY environment variable not set".to_string(),
         })
     }
 }
@@ -37,15 +37,29 @@ impl AiProvider for ClaudeProvider {
         true
     }
 
-    fn complete(
+    fn complete_structured(
         &self,
         model: &str,
         temperature: f32,
         system_prompt: &str,
         user_prompt: &str,
-    ) -> Result<String, Box<dyn Error>> {
+    ) -> Result<CommitTemplate, Box<dyn Error>> {
         let api_key = Self::get_api_key()?;
         let client = Client::new();
+
+        // Get the schema from the trait method
+        let schema = self.get_commit_template_schema();
+
+        // Convert the schema to a pretty-printed string for the system prompt
+        let schema_str = serde_json::to_string_pretty(&schema).unwrap_or_default();
+
+        // Create a system prompt that instructs the model to return JSON
+        let json_system_prompt = format!(
+            "{}\n\nYou MUST respond with a valid JSON object that matches this schema:\n\
+            {}\n\
+            Do not include any explanations or text outside of the JSON object.",
+            system_prompt, schema_str
+        );
 
         let response = client
             .post(format!("{}/v1/messages", Self::api_base_url()))
@@ -56,7 +70,7 @@ impl AiProvider for ClaudeProvider {
                 "model": model,
                 "max_tokens": 1024,
                 "temperature": temperature,
-                "system": system_prompt,
+                "system": json_system_prompt,
                 "messages": [{
                     "role": "user",
                     "content": user_prompt
@@ -76,7 +90,10 @@ impl AiProvider for ClaudeProvider {
                 } else {
                     format!("Unknown error: {}", e)
                 };
-                Box::new(AiError::ApiError(error_msg))
+                Box::new(AiError::ApiError {
+                    code: e.status().map(|s| s.as_u16()).unwrap_or(500),
+                    message: error_msg,
+                })
             })?;
 
         let status = response.status();
@@ -89,21 +106,22 @@ impl AiProvider for ClaudeProvider {
             if error_text.contains("model")
                 && (status.as_u16() == 404 || error_text.contains("not found"))
             {
-                return Err(Box::new(AiError::InvalidModel(format!(
-                    "The model `{}` does not exist or you do not have access to it.",
-                    model
-                ))));
+                return Err(Box::new(AiError::InvalidModel {
+                    model: model.to_string(),
+                }));
             }
 
-            return Err(Box::new(AiError::ApiError(format!(
-                "API error (status {}): {}",
-                status, error_text
-            ))));
+            return Err(Box::new(AiError::ApiError {
+                code: status.as_u16(),
+                message: format!("API error (status {}): {}", status, error_text),
+            }));
         }
 
-        let json: Value = response
-            .json()
-            .map_err(|e| Box::new(AiError::ApiError(format!("Failed to parse JSON: {}", e))))?;
+        let json: Value = response.json().map_err(|e| {
+            Box::new(AiError::JsonError {
+                message: format!("Failed to parse JSON: {}", e),
+            })
+        })?;
 
         if let Some(content) = json
             .get("content")
@@ -112,11 +130,18 @@ impl AiProvider for ClaudeProvider {
             .and_then(|first_content| first_content.get("text"))
             .and_then(|text| text.as_str())
         {
-            Ok(content.trim().to_string())
+            // Extract the JSON object from the response
+            let content = content.trim();
+
+            // Parse the JSON response into CommitTemplate
+            let template_data = parse_commit_template_json(content)?;
+
+            Ok(template_data)
         } else {
-            Err(Box::new(AiError::ApiError(
-                "Failed to extract content from response".to_string(),
-            )))
+            Err(Box::new(AiError::ApiError {
+                code: 500,
+                message: "Failed to extract content from response".to_string(),
+            }))
         }
     }
 
@@ -128,8 +153,9 @@ impl AiProvider for ClaudeProvider {
         crate::ai::CLAUDE_DEFAULT_TEMP
     }
 
-    fn is_available(&self) -> bool {
-        Self::get_api_key().is_ok()
+    fn check_available(&self) -> Result<(), Box<dyn Error>> {
+        Self::get_api_key()?;
+        Ok(())
     }
 
     fn fetch_available_models(&self) -> Result<Vec<String>, Box<dyn Error>> {
@@ -143,22 +169,42 @@ impl AiProvider for ClaudeProvider {
             .header("anthropic-version", "2023-06-01")
             .header("content-type", "application/json")
             .send()
-            .map_err(|e| Box::new(AiError::ApiError(format!("Failed to fetch models: {}", e))))?;
+            .map_err(|e| {
+                let error_msg = if e.is_timeout() {
+                    format!("Request timed out: {}", e)
+                } else if e.is_connect() {
+                    format!(
+                        "Connection error: {}. Please check your internet connection.",
+                        e
+                    )
+                } else if let Some(status) = e.status() {
+                    format!("API error (status {}): {}", status, e)
+                } else {
+                    format!("Unknown error: {}", e)
+                };
+                Box::new(AiError::ApiError {
+                    code: e.status().map(|s| s.as_u16()).unwrap_or(500),
+                    message: error_msg,
+                })
+            })?;
 
         let status = response.status();
         if !status.is_success() {
             let error_text = response
                 .text()
                 .unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(Box::new(AiError::ApiError(format!(
-                "API error (status {}): {}",
-                status, error_text
-            ))));
+            return Err(Box::new(AiError::ApiError {
+                code: status.as_u16(),
+                message: format!("Failed to fetch models: {}", error_text),
+            }));
         }
 
-        let json: Value = response
-            .json()
-            .map_err(|e| Box::new(AiError::ApiError(format!("Failed to parse JSON: {}", e))))?;
+        let json: Value = response.json().map_err(|e| {
+            Box::new(AiError::ApiError {
+                code: 500,
+                message: format!("Failed to parse JSON: {}", e),
+            })
+        })?;
 
         // Extract model IDs from the response
         let mut models = json
@@ -175,9 +221,10 @@ impl AiProvider for ClaudeProvider {
 
         // If we couldn't get any models, return a fallback list
         if models.is_empty() {
-            return Err(Box::new(AiError::ApiError(
-                "Failed to fetch available models from the API".to_string(),
-            )));
+            return Err(Box::new(AiError::ApiError {
+                code: 404,
+                message: "No models found in Anthropic API".to_string(),
+            }));
         }
 
         // models ending in -latest do not show up in the API response
@@ -213,13 +260,13 @@ mod tests {
             .with_status(200)
             .with_body(r#"{
                 "content": [{
-                    "text": "feat: add new feature\n\n- Implement cool functionality\n- Update tests"
+                    "text": "{\"type\": \"feat\", \"subject\": \"add new feature\", \"details\": \"- Implement cool functionality\\n- Update tests\", \"issues\": null, \"breaking\": null, \"scope\": null}"
                 }]
             }"#)
             .create();
 
         let provider = ClaudeProvider::new();
-        let result = provider.complete(
+        let result = provider.complete_structured(
             "claude-3-7-sonnet-latest",
             0.3,
             "test system prompt",
@@ -227,8 +274,12 @@ mod tests {
         );
         assert!(result.is_ok());
         let message = result.unwrap();
-        assert!(message.contains("feat: add new feature"));
-        assert!(message.contains("Implement cool functionality"));
+        assert_eq!(message.r#type, crate::templates::CommitType::Feat);
+        assert_eq!(message.subject, "add new feature");
+        assert_eq!(
+            message.details,
+            Some("- Implement cool functionality\n- Update tests".to_string())
+        );
 
         mock.assert();
     }
@@ -252,7 +303,7 @@ mod tests {
             .create();
 
         let provider = ClaudeProvider::new();
-        let result = provider.complete(
+        let result = provider.complete_structured(
             "claude-3-7-sonnet-latest",
             0.3,
             "test system prompt",
@@ -260,7 +311,6 @@ mod tests {
         );
         assert!(result.is_err());
         let error = result.unwrap_err().to_string();
-        println!("Actual Claude API error: {}", error);
 
         // The error should contain either the exact message or indicate an API error
         assert!(
@@ -285,14 +335,14 @@ mod tests {
             .with_body(
                 r#"{
                 "content": [{
-                    "text": "test commit message"
+                    "text": "{\"type\": \"test\", \"subject\": \"test commit message\", \"details\": null, \"issues\": null, \"breaking\": null, \"scope\": null}"
                 }]
             }"#,
             )
             .create();
 
         let provider = ClaudeProvider::new();
-        let result = provider.complete(
+        let result = provider.complete_structured(
             "custom-model",
             0.8,
             "test system prompt",
@@ -300,7 +350,8 @@ mod tests {
         );
         assert!(result.is_ok());
         let message = result.unwrap();
-        assert_eq!(message, "test commit message");
+        assert_eq!(message.r#type, crate::templates::CommitType::Test);
+        assert_eq!(message.subject, "test commit message");
 
         mock.assert();
     }
@@ -417,7 +468,7 @@ mod tests {
             .create();
 
         let provider = ClaudeProvider::new();
-        let result = provider.complete(
+        let result = provider.complete_structured(
             "invalid-model-name",
             0.3,
             "test system prompt",
@@ -427,10 +478,17 @@ mod tests {
         // Verify that an error is returned
         assert!(result.is_err());
 
-        // Check that the error message contains the expected text
-        let error = result.unwrap_err().to_string();
-        assert!(error.contains("does not exist"));
-        assert!(error.contains("invalid-model-name"));
+        // Check that the error is an InvalidModel error
+        let error = result.unwrap_err();
+        let error_string = error.to_string();
+        assert!(error_string.contains("invalid-model-name"));
+
+        // Downcast the error to check if it's an InvalidModel error
+        let is_invalid_model = error
+            .downcast_ref::<AiError>()
+            .map(|e| matches!(e, AiError::InvalidModel { .. }))
+            .unwrap_or(false);
+        assert!(is_invalid_model, "Expected InvalidModel error");
 
         // Test that fetch_available_models returns the expected models
         let models = provider.fetch_available_models().unwrap();

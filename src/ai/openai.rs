@@ -16,8 +16,9 @@ impl OpenAiProvider {
     }
 
     fn get_api_key() -> Result<String, AiError> {
-        env::var("OPENAI_API_KEY").map_err(|_| {
-            AiError::ProviderNotAvailable("OPENAI_API_KEY environment variable not set".to_string())
+        env::var("OPENAI_API_KEY").map_err(|_| AiError::ProviderNotAvailable {
+            provider_name: "openai".to_string(),
+            message: "OPENAI_API_KEY environment variable not set".to_string(),
         })
     }
 }
@@ -78,7 +79,10 @@ impl AiProvider for OpenAiProvider {
                 } else {
                     format!("Unknown error: {}", e)
                 };
-                Box::new(AiError::ApiError(error_msg))
+                Box::new(AiError::ApiError {
+                    code: e.status().map(|s| s.as_u16()).unwrap_or(500),
+                    message: error_msg,
+                })
             })?;
 
         let status = response.status();
@@ -93,21 +97,23 @@ impl AiProvider for OpenAiProvider {
                     || error_text.contains("does not exist")
                     || error_text.contains("not found"))
             {
-                return Err(Box::new(AiError::InvalidModel(format!(
-                    "The model `{}` does not exist or you do not have access to it.",
-                    model
-                ))));
+                return Err(Box::new(AiError::InvalidModel {
+                    model: model.to_string(),
+                }));
             }
 
-            return Err(Box::new(AiError::ApiError(format!(
-                "API error (status {}): {}",
-                status, error_text
-            ))));
+            return Err(Box::new(AiError::ApiError {
+                code: status.as_u16(),
+                message: format!("API error (status {}): {}", status, error_text),
+            }));
         }
 
-        let json: Value = response
-            .json()
-            .map_err(|e| Box::new(AiError::ApiError(format!("Failed to parse JSON: {}", e))))?;
+        let json: Value = response.json().map_err(|e| {
+            Box::new(AiError::ApiError {
+                code: 500,
+                message: format!("Failed to parse JSON: {}", e),
+            })
+        })?;
 
         if let Some(content) = json
             .get("choices")
@@ -119,9 +125,10 @@ impl AiProvider for OpenAiProvider {
         {
             Ok(content.trim().to_string())
         } else {
-            Err(Box::new(AiError::ApiError(
-                "Failed to extract content from response".to_string(),
-            )))
+            Err(Box::new(AiError::ApiError {
+                code: 500,
+                message: "Failed to extract content from response".to_string(),
+            }))
         }
     }
 
@@ -133,8 +140,9 @@ impl AiProvider for OpenAiProvider {
         crate::ai::OPENAI_DEFAULT_TEMP
     }
 
-    fn is_available(&self) -> bool {
-        Self::get_api_key().is_ok()
+    fn check_available(&self) -> Result<(), Box<dyn Error>> {
+        Self::get_api_key()?;
+        Ok(())
     }
 
     fn fetch_available_models(&self) -> Result<Vec<String>, Box<dyn Error>> {
@@ -146,22 +154,29 @@ impl AiProvider for OpenAiProvider {
             .header("Authorization", format!("Bearer {}", api_key))
             .header("Content-Type", "application/json")
             .send()
-            .map_err(|e| Box::new(AiError::ApiError(format!("Failed to fetch models: {}", e))))?;
+            .map_err(|e| {
+                Box::new(AiError::ApiError {
+                    code: e.status().map(|s| s.as_u16()).unwrap_or(500),
+                    message: format!("Failed to fetch models: {}", e),
+                })
+            })?;
 
         let status = response.status();
         if !status.is_success() {
             let error_text = response
                 .text()
                 .unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(Box::new(AiError::ApiError(format!(
-                "API error (status {}): {}",
-                status, error_text
-            ))));
+            return Err(Box::new(AiError::ApiError {
+                code: status.as_u16(),
+                message: format!("API error (status {}): {}", status, error_text),
+            }));
         }
 
-        let json: Value = response
-            .json()
-            .map_err(|e| Box::new(AiError::ApiError(format!("Failed to parse JSON: {}", e))))?;
+        let json: Value = response.json().map_err(|e| {
+            Box::new(AiError::JsonError {
+                message: format!("Failed to parse JSON: {}", e),
+            })
+        })?;
 
         let models = json
             .get("data")
@@ -345,10 +360,17 @@ mod tests {
         // Verify that an error is returned
         assert!(result.is_err());
 
-        // Check that the error message contains the expected text
-        let error = result.unwrap_err().to_string();
-        assert!(error.contains("does not exist"));
-        assert!(error.contains("invalid-model-name"));
+        // Check that the error is an InvalidModel error
+        let error = result.unwrap_err();
+        let error_string = error.to_string();
+        assert!(error_string.contains("invalid-model-name"));
+
+        // Downcast the error to check if it's an InvalidModel error
+        let is_invalid_model = error
+            .downcast_ref::<AiError>()
+            .map(|e| matches!(e, AiError::InvalidModel { .. }))
+            .unwrap_or(false);
+        assert!(is_invalid_model, "Expected InvalidModel error");
 
         // Test that fetch_available_models returns the expected models
         let models = provider.fetch_available_models().unwrap();

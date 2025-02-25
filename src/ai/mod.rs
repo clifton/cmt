@@ -51,7 +51,7 @@ pub trait AiProvider: Send + Sync + Debug {
     fn default_temperature(&self) -> f32;
 
     /// Check if the provider is available (API key set, etc.)
-    fn is_available(&self) -> bool;
+    fn check_available(&self) -> Result<(), Box<dyn Error>>;
 
     /// Fetch available models from the API
     /// This is called only after receiving an error about an invalid model
@@ -96,7 +96,7 @@ impl ProviderRegistry {
     pub fn available_providers(&self) -> Vec<Arc<dyn AiProvider>> {
         self.providers
             .iter()
-            .filter(|p| p.is_available())
+            .filter(|p| p.check_available().is_ok())
             .cloned()
             .collect()
     }
@@ -129,20 +129,26 @@ pub fn create_default_registry() -> ProviderRegistry {
 // Error type for AI provider operations
 #[derive(Debug, thiserror::Error)]
 pub enum AiError {
-    #[error("Provider not found: {0}")]
-    ProviderNotFound(String),
+    #[error("Provider not found: {provider_name}")]
+    ProviderNotFound { provider_name: String },
 
-    #[error("Provider not available: {0}")]
-    ProviderNotAvailable(String),
+    #[error("Provider not available: {provider_name}")]
+    ProviderNotAvailable {
+        provider_name: String,
+        message: String,
+    },
 
-    #[error("API error: {0}")]
-    ApiError(String),
+    #[error("API error: {code} {message}")]
+    ApiError { code: u16, message: String },
 
-    #[error("Invalid configuration: {0}")]
-    InvalidConfig(String),
+    #[error("JSON error: {message}")]
+    JsonError { message: String },
 
-    #[error("Invalid model: {0}")]
-    InvalidModel(String),
+    #[error("Invalid configuration: {message}")]
+    InvalidConfig { message: String },
+
+    #[error("Invalid model: {model}")]
+    InvalidModel { model: String },
 }
 
 #[cfg(test)]
@@ -186,8 +192,8 @@ mod tests {
             0.5
         }
 
-        fn is_available(&self) -> bool {
-            true
+        fn check_available(&self) -> Result<(), Box<dyn Error>> {
+            Ok(())
         }
 
         fn fetch_available_models(&self) -> Result<Vec<String>, Box<dyn Error>> {

@@ -26,17 +26,15 @@ pub fn generate_commit_message(
     let provider = match registry.get(provider_name) {
         Some(p) => p,
         None => {
-            return Err(Box::new(ai::AiError::ProviderNotFound(
-                provider_name.clone(),
-            )))
+            return Err(Box::new(ai::AiError::ProviderNotFound {
+                provider_name: provider_name.clone(),
+            }));
         }
     };
 
     // Check if the provider is available (has API key)
-    if !provider.is_available() {
-        return Err(Box::new(ai::AiError::ProviderNotAvailable(
-            provider_name.clone(),
-        )));
+    if let Err(e) = provider.check_available() {
+        return Err(e);
     }
 
     // Get the model name, defaulting to the provider's default model
@@ -70,12 +68,7 @@ pub fn generate_commit_message(
     let response = match provider.complete(&model, temperature, &system_prompt, &prompt) {
         Ok(response) => response,
         Err(err) => {
-            let err_str = err.to_string();
-
-            // Check if this is a model-related error
-            if err_str.contains("model")
-                && (err_str.contains("not exist") || err_str.contains("not found"))
-            {
+            if let Some(ai::AiError::InvalidModel { model }) = err.downcast_ref::<ai::AiError>() {
                 // Try to fetch available models
                 match provider.fetch_available_models() {
                     Ok(models) if !models.is_empty() => {
@@ -83,16 +76,18 @@ pub fn generate_commit_message(
                         let mut sorted_models = models.clone();
                         sorted_models.sort();
 
-                        let available_models = sorted_models
-                            .iter()
-                            .map(|model| format!("\n  • {}", model))
-                            .collect::<Vec<String>>()
-                            .join("");
+                        println!("Available models: {}", sorted_models.join(", "));
 
-                        return Err(Box::new(ai::AiError::InvalidModel(format!(
-                            "Model '{}' is invalid for provider '{}'. Available models:{}",
-                            model, provider_name, available_models
-                        ))));
+                        return Err(format!(
+                            "Invalid model: {}\nAvailable models:{}",
+                            model,
+                            sorted_models
+                                .iter()
+                                .map(|model| format!("\n  • {}", model))
+                                .collect::<Vec<String>>()
+                                .join("")
+                        )
+                        .into());
                     }
                     _ => {} // If we can't fetch models, just return the original error
                 }
@@ -316,8 +311,8 @@ mod tests {
             fn requires_api_key(&self) -> bool {
                 false
             }
-            fn is_available(&self) -> bool {
-                true
+            fn check_available(&self) -> Result<(), Box<dyn Error>> {
+                Ok(())
             }
             fn default_model(&self) -> &str {
                 "test-model"
@@ -405,8 +400,8 @@ mod tests {
             fn requires_api_key(&self) -> bool {
                 false
             }
-            fn is_available(&self) -> bool {
-                true
+            fn check_available(&self) -> Result<(), Box<dyn Error>> {
+                Ok(())
             }
             fn default_model(&self) -> &str {
                 "mock-default-model"

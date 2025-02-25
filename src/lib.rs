@@ -7,8 +7,6 @@ mod git;
 mod prompts;
 mod templates;
 
-use templates::TemplateData;
-
 pub fn generate_commit_message(
     args: &Args,
     git_diff: &str,
@@ -64,119 +62,47 @@ pub fn generate_commit_message(
         .temperature
         .unwrap_or_else(|| provider.default_temperature());
 
-    // Try to complete the prompt, handle model errors specially
-    let response = match provider.complete(&model, temperature, &system_prompt, &prompt) {
-        Ok(response) => response,
-        Err(err) => {
-            if let Some(ai::AiError::InvalidModel { model }) = err.downcast_ref::<ai::AiError>() {
-                // Try to fetch available models
-                match provider.fetch_available_models() {
-                    Ok(models) if !models.is_empty() => {
-                        // Sort models alphabetically and format as a bulleted list for better readability
-                        let mut sorted_models = models.clone();
-                        sorted_models.sort();
+    // Try to complete the prompt with structured output, handle model errors specially
+    let commit_data =
+        match provider.complete_structured(&model, temperature, &system_prompt, &prompt) {
+            Ok(data) => data,
+            Err(err) => {
+                if let Some(ai::AiError::InvalidModel { model }) = err.downcast_ref::<ai::AiError>()
+                {
+                    // Try to fetch available models
+                    match provider.fetch_available_models() {
+                        Ok(models) if !models.is_empty() => {
+                            // Sort models alphabetically and format as a bulleted list for better readability
+                            let mut sorted_models = models.clone();
+                            sorted_models.sort();
 
-                        println!("Available models: {}", sorted_models.join(", "));
+                            println!("Available models: {}", sorted_models.join(", "));
 
-                        return Err(format!(
-                            "Invalid model: {}\nAvailable models:{}",
-                            model,
-                            sorted_models
-                                .iter()
-                                .map(|model| format!("\n  • {}", model))
-                                .collect::<Vec<String>>()
-                                .join("")
-                        )
-                        .into());
+                            return Err(format!(
+                                "Invalid model: {}\nAvailable models:{}",
+                                model,
+                                sorted_models
+                                    .iter()
+                                    .map(|model| format!("\n  • {}", model))
+                                    .collect::<Vec<String>>()
+                                    .join("")
+                            )
+                            .into());
+                        }
+                        _ => {} // If we can't fetch models, just return the original error
                     }
-                    _ => {} // If we can't fetch models, just return the original error
                 }
+
+                // Return the original error
+                return Err(err);
             }
-
-            // Return the original error
-            return Err(err);
-        }
-    };
-
-    // Parse the commit message
-    let commit_data = parse_commit_message(&response)?;
+        };
 
     // Render the template
     let rendered = template_manager.render(&template_name, &commit_data)?;
 
     // Return the rendered message along with provider and model info
     Ok(rendered)
-}
-
-/// Parse a commit message into template data
-fn parse_commit_message(message: &str) -> Result<TemplateData, Box<dyn std::error::Error>> {
-    let mut data = TemplateData::default();
-
-    // Split the message into lines
-    let lines: Vec<&str> = message.lines().collect();
-
-    if lines.is_empty() {
-        return Err("Empty commit message".into());
-    }
-
-    // Find where the AI explanation starts (if any)
-    let mut end_idx = lines.len();
-    for (i, line) in lines.iter().enumerate() {
-        let trimmed = line.trim();
-        // Check for various AI explanation markers
-        if trimmed == "AI:"
-            || trimmed == "Anthropic:"
-            || trimmed == "Claude:"
-            || trimmed == "OpenAI:"
-            || trimmed.starts_with("AI:")
-            || trimmed.starts_with("Anthropic:")
-            || trimmed.starts_with("Claude:")
-            || trimmed.starts_with("OpenAI:")
-        {
-            end_idx = i;
-            break;
-        }
-    }
-
-    // Parse the first line (type: subject)
-    let first_line = lines[0];
-    if let Some(colon_pos) = first_line.find(':') {
-        data.r#type = first_line[..colon_pos].trim().to_string();
-
-        // Check for scope in type
-        if let Some(open_paren) = data.r#type.find('(') {
-            if let Some(close_paren) = data.r#type.find(')') {
-                if open_paren < close_paren {
-                    let scope = data.r#type[open_paren + 1..close_paren].trim().to_string();
-                    data.scope = Some(scope);
-                    data.r#type = data.r#type[..open_paren].trim().to_string();
-                }
-            }
-        }
-
-        data.subject = first_line[colon_pos + 1..].trim().to_string();
-    } else {
-        // If there's no colon, use the whole line as the subject
-        data.subject = first_line.trim().to_string();
-    }
-
-    // Parse the rest of the message for details
-    if lines.len() > 1 {
-        // Skip empty lines after the first line
-        let mut start_idx = 1;
-        while start_idx < end_idx && lines[start_idx].trim().is_empty() {
-            start_idx += 1;
-        }
-
-        if start_idx < end_idx {
-            let details = lines[start_idx..end_idx].join("\n");
-            if !details.trim().is_empty() {
-                data.details = Some(details);
-            }
-        }
-    }
-
-    Ok(data)
 }
 
 // Re-export the config module for external use
@@ -199,8 +125,9 @@ pub mod ai_mod {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ai::AiProvider;
+    use crate::ai::{AiError, AiProvider};
     use crate::config::cli::Args;
+    use crate::templates::TemplateData;
     use std::env;
     use std::error::Error;
 
@@ -321,20 +248,27 @@ mod tests {
                 0.5
             }
 
-            fn complete(
+            fn complete_structured(
                 &self,
                 model: &str,
                 _temperature: f32,
                 _system_prompt: &str,
                 _user_prompt: &str,
-            ) -> Result<String, Box<dyn Error>> {
+            ) -> Result<TemplateData, Box<dyn Error>> {
                 if model == "invalid-model" {
                     return Err(
                         "The model `invalid-model` does not exist or you do not have access to it."
                             .into(),
                     );
                 }
-                Ok("Test response".to_string())
+                Ok(TemplateData {
+                    r#type: "test".to_string(),
+                    subject: "test response".to_string(),
+                    details: None,
+                    issues: None,
+                    breaking: None,
+                    scope: None,
+                })
             }
 
             fn fetch_available_models(&self) -> Result<Vec<String>, Box<dyn Error>> {
@@ -345,7 +279,7 @@ mod tests {
         let provider = TestProvider;
 
         // Test the error handling directly
-        let result = provider.complete(
+        let result = provider.complete_structured(
             "invalid-model",
             0.5,
             "test system prompt",
@@ -410,18 +344,16 @@ mod tests {
                 0.5
             }
 
-            fn complete(
+            fn complete_structured(
                 &self,
                 model: &str,
                 _temperature: f32,
                 _system_prompt: &str,
                 _user_prompt: &str,
-            ) -> Result<String, Box<dyn Error>> {
-                // Always return a model-related error
-                Err(format!(
-                    "The model `{}` does not exist or you do not have access to it.",
-                    model
-                )
+            ) -> Result<TemplateData, Box<dyn Error>> {
+                Err(AiError::InvalidModel {
+                    model: model.to_string(),
+                }
                 .into())
             }
 
@@ -441,14 +373,13 @@ mod tests {
         let provider_name = provider.name();
 
         // Simulate the error handling in generate_commit_message
-        let err = provider.complete(model, 0.5, "test", "test").unwrap_err();
+        let err = provider
+            .complete_structured(model, 0.5, "test", "test")
+            .unwrap_err();
         let err_str = err.to_string();
 
         // Check if this is a model-related error
-        assert!(
-            err_str.contains("model")
-                && (err_str.contains("not exist") || err_str.contains("not found"))
-        );
+        assert_eq!(err_str, "Invalid model: invalid-mock-model");
 
         // Get available models
         let models = provider.fetch_available_models().unwrap();

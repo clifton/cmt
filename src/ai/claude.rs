@@ -1,4 +1,5 @@
 use crate::ai::{AiError, AiProvider};
+use crate::templates::TemplateData;
 use reqwest::blocking::Client;
 use serde_json::{json, Value};
 use std::{env, error::Error};
@@ -36,15 +37,30 @@ impl AiProvider for ClaudeProvider {
         true
     }
 
-    fn complete(
+    fn complete_structured(
         &self,
         model: &str,
         temperature: f32,
         system_prompt: &str,
         user_prompt: &str,
-    ) -> Result<String, Box<dyn Error>> {
+    ) -> Result<TemplateData, Box<dyn Error>> {
         let api_key = Self::get_api_key()?;
         let client = Client::new();
+
+        // Create a system prompt that instructs the model to return JSON
+        let json_system_prompt = format!(
+            "{}\n\nYou MUST respond with a valid JSON object that matches this schema:\n\
+            {{\n\
+              \"type\": \"string\",\n\
+              \"subject\": \"string\",\n\
+              \"details\": \"string | null\",\n\
+              \"issues\": \"string | null\",\n\
+              \"breaking\": \"string | null\",\n\
+              \"scope\": \"string | null\"\n\
+            }}\n\
+            Do not include any explanations or text outside of the JSON object.",
+            system_prompt
+        );
 
         let response = client
             .post(format!("{}/v1/messages", Self::api_base_url()))
@@ -55,7 +71,7 @@ impl AiProvider for ClaudeProvider {
                 "model": model,
                 "max_tokens": 1024,
                 "temperature": temperature,
-                "system": system_prompt,
+                "system": json_system_prompt,
                 "messages": [{
                     "role": "user",
                     "content": user_prompt
@@ -115,7 +131,23 @@ impl AiProvider for ClaudeProvider {
             .and_then(|first_content| first_content.get("text"))
             .and_then(|text| text.as_str())
         {
-            Ok(content.trim().to_string())
+            // Extract the JSON object from the response
+            let content = content.trim();
+
+            // Parse the JSON response into TemplateData
+            let template_data: TemplateData = match serde_json::from_str(content) {
+                Ok(data) => data,
+                Err(e) => {
+                    return Err(Box::new(AiError::JsonError {
+                        message: format!(
+                            "Failed to parse response as TemplateData: {}. Response: {}",
+                            e, content
+                        ),
+                    }));
+                }
+            };
+
+            Ok(template_data)
         } else {
             Err(Box::new(AiError::ApiError {
                 code: 500,
@@ -239,13 +271,13 @@ mod tests {
             .with_status(200)
             .with_body(r#"{
                 "content": [{
-                    "text": "feat: add new feature\n\n- Implement cool functionality\n- Update tests"
+                    "text": "{\"type\": \"feat\", \"subject\": \"add new feature\", \"details\": \"- Implement cool functionality\\n- Update tests\", \"issues\": null, \"breaking\": null, \"scope\": null}"
                 }]
             }"#)
             .create();
 
         let provider = ClaudeProvider::new();
-        let result = provider.complete(
+        let result = provider.complete_structured(
             "claude-3-7-sonnet-latest",
             0.3,
             "test system prompt",
@@ -253,8 +285,12 @@ mod tests {
         );
         assert!(result.is_ok());
         let message = result.unwrap();
-        assert!(message.contains("feat: add new feature"));
-        assert!(message.contains("Implement cool functionality"));
+        assert_eq!(message.r#type, "feat");
+        assert_eq!(message.subject, "add new feature");
+        assert_eq!(
+            message.details,
+            Some("- Implement cool functionality\n- Update tests".to_string())
+        );
 
         mock.assert();
     }
@@ -278,7 +314,7 @@ mod tests {
             .create();
 
         let provider = ClaudeProvider::new();
-        let result = provider.complete(
+        let result = provider.complete_structured(
             "claude-3-7-sonnet-latest",
             0.3,
             "test system prompt",
@@ -311,14 +347,14 @@ mod tests {
             .with_body(
                 r#"{
                 "content": [{
-                    "text": "test commit message"
+                    "text": "{\"type\": \"test\", \"subject\": \"test commit message\", \"details\": null, \"issues\": null, \"breaking\": null, \"scope\": null}"
                 }]
             }"#,
             )
             .create();
 
         let provider = ClaudeProvider::new();
-        let result = provider.complete(
+        let result = provider.complete_structured(
             "custom-model",
             0.8,
             "test system prompt",
@@ -326,7 +362,8 @@ mod tests {
         );
         assert!(result.is_ok());
         let message = result.unwrap();
-        assert_eq!(message, "test commit message");
+        assert_eq!(message.r#type, "test");
+        assert_eq!(message.subject, "test commit message");
 
         mock.assert();
     }
@@ -443,7 +480,7 @@ mod tests {
             .create();
 
         let provider = ClaudeProvider::new();
-        let result = provider.complete(
+        let result = provider.complete_structured(
             "invalid-model-name",
             0.3,
             "test system prompt",

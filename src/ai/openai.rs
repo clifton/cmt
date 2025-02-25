@@ -1,4 +1,5 @@
 use crate::ai::{AiError, AiProvider};
+use crate::templates::TemplateData;
 use reqwest::blocking::Client;
 use serde_json::{json, Value};
 use std::{env, error::Error};
@@ -36,15 +37,51 @@ impl AiProvider for OpenAiProvider {
         true
     }
 
-    fn complete(
+    fn complete_structured(
         &self,
         model: &str,
         temperature: f32,
         system_prompt: &str,
         user_prompt: &str,
-    ) -> Result<String, Box<dyn Error>> {
+    ) -> Result<TemplateData, Box<dyn Error>> {
         let api_key = Self::get_api_key()?;
         let client = Client::new();
+
+        // Define the function schema for the commit message structure
+        let function_schema = json!({
+            "name": "generate_commit_message",
+            "description": "Generate a structured commit message based on the changes",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "type": {
+                        "type": "string",
+                        "description": "The type of change (e.g., feat, fix, docs, style, refactor, test, chore)"
+                    },
+                    "subject": {
+                        "type": "string",
+                        "description": "A short description of the change"
+                    },
+                    "details": {
+                        "type": ["string", "null"],
+                        "description": "Optional detailed description of the change"
+                    },
+                    "issues": {
+                        "type": ["string", "null"],
+                        "description": "Optional references to issues"
+                    },
+                    "breaking": {
+                        "type": ["string", "null"],
+                        "description": "Optional description of breaking changes"
+                    },
+                    "scope": {
+                        "type": ["string", "null"],
+                        "description": "Optional scope of the change"
+                    }
+                },
+                "required": ["type", "subject"]
+            }
+        });
 
         let response = client
             .post(format!("{}/v1/chat/completions", Self::api_base_url()))
@@ -63,7 +100,18 @@ impl AiProvider for OpenAiProvider {
                     }
                 ],
                 "temperature": temperature,
-                "max_tokens": 100
+                "tools": [
+                    {
+                        "type": "function",
+                        "function": function_schema
+                    }
+                ],
+                "tool_choice": {
+                    "type": "function",
+                    "function": {
+                        "name": "generate_commit_message"
+                    }
+                }
             }))
             .send()
             .map_err(|e| {
@@ -93,9 +141,7 @@ impl AiProvider for OpenAiProvider {
 
             // Check if this is a model-related error
             if error_text.contains("model")
-                && (status.as_u16() == 404
-                    || error_text.contains("does not exist")
-                    || error_text.contains("not found"))
+                && (status.as_u16() == 404 || error_text.contains("not found"))
             {
                 return Err(Box::new(AiError::InvalidModel {
                     model: model.to_string(),
@@ -109,27 +155,37 @@ impl AiProvider for OpenAiProvider {
         }
 
         let json: Value = response.json().map_err(|e| {
-            Box::new(AiError::ApiError {
-                code: 500,
+            Box::new(AiError::JsonError {
                 message: format!("Failed to parse JSON: {}", e),
             })
         })?;
 
-        if let Some(content) = json
+        // Extract the function call arguments from the response
+        let function_args = json
             .get("choices")
             .and_then(|choices| choices.as_array())
             .and_then(|choices| choices.first())
             .and_then(|choice| choice.get("message"))
-            .and_then(|message| message.get("content"))
-            .and_then(|content| content.as_str())
-        {
-            Ok(content.trim().to_string())
-        } else {
-            Err(Box::new(AiError::ApiError {
-                code: 500,
-                message: "Failed to extract content from response".to_string(),
-            }))
-        }
+            .and_then(|message| message.get("tool_calls"))
+            .and_then(|tool_calls| tool_calls.as_array())
+            .and_then(|tool_calls| tool_calls.first())
+            .and_then(|tool_call| tool_call.get("function"))
+            .and_then(|function| function.get("arguments"))
+            .and_then(|arguments| arguments.as_str())
+            .ok_or_else(|| {
+                Box::new(AiError::JsonError {
+                    message: "Failed to extract function arguments from response".to_string(),
+                }) as Box<dyn Error>
+            })?;
+
+        // Parse the function arguments into TemplateData
+        let template_data: TemplateData = serde_json::from_str(function_args).map_err(|e| {
+            Box::new(AiError::JsonError {
+                message: format!("Failed to parse function arguments as TemplateData: {}", e),
+            })
+        })?;
+
+        Ok(template_data)
     }
 
     fn default_model(&self) -> &str {
@@ -231,7 +287,14 @@ mod tests {
                 "choices": [
                     {
                         "message": {
-                            "content": "feat: add new feature\n\n- Implement cool functionality\n- Update tests"
+                            "tool_calls": [
+                                {
+                                    "function": {
+                                        "name": "generate_commit_message",
+                                        "arguments": "{\"type\": \"feat\", \"subject\": \"add new feature\", \"details\": \"- Implement cool functionality\\n- Update tests\", \"issues\": null, \"breaking\": null, \"scope\": null}"
+                                    }
+                                }
+                            ]
                         }
                     }
                 ]
@@ -240,11 +303,16 @@ mod tests {
             .create();
 
         let provider = OpenAiProvider::new();
-        let result = provider.complete("gpt-4o", 1.0, "test system prompt", "test user prompt");
+        let result =
+            provider.complete_structured("gpt-4o", 1.0, "test system prompt", "test user prompt");
         assert!(result.is_ok());
         let message = result.unwrap();
-        assert!(message.contains("feat: add new feature"));
-        assert!(message.contains("Implement cool functionality"));
+        assert_eq!(message.r#type, "feat");
+        assert_eq!(message.subject, "add new feature");
+        assert_eq!(
+            message.details,
+            Some("- Implement cool functionality\n- Update tests".to_string())
+        );
 
         mock.assert();
     }
@@ -268,7 +336,8 @@ mod tests {
             .create();
 
         let provider = OpenAiProvider::new();
-        let result = provider.complete("gpt-4o", 1.0, "test system prompt", "test user prompt");
+        let result =
+            provider.complete_structured("gpt-4o", 1.0, "test system prompt", "test user prompt");
         assert!(result.is_err());
         let error = result.unwrap_err().to_string();
         assert!(error.contains("Invalid request parameters"));
@@ -290,7 +359,14 @@ mod tests {
                 "choices": [
                     {
                         "message": {
-                            "content": "test commit message"
+                            "tool_calls": [
+                                {
+                                    "function": {
+                                        "name": "generate_commit_message",
+                                        "arguments": "{\"type\": \"test\", \"subject\": \"test commit message\", \"details\": null, \"issues\": null, \"breaking\": null, \"scope\": null}"
+                                    }
+                                }
+                            ]
                         }
                     }
                 ]
@@ -299,7 +375,7 @@ mod tests {
             .create();
 
         let provider = OpenAiProvider::new();
-        let result = provider.complete(
+        let result = provider.complete_structured(
             "custom-model",
             0.5,
             "test system prompt",
@@ -307,7 +383,8 @@ mod tests {
         );
         assert!(result.is_ok());
         let message = result.unwrap();
-        assert_eq!(message, "test commit message");
+        assert_eq!(message.r#type, "test");
+        assert_eq!(message.subject, "test commit message");
 
         mock.assert();
     }
@@ -350,7 +427,7 @@ mod tests {
             .create();
 
         let provider = OpenAiProvider::new();
-        let result = provider.complete(
+        let result = provider.complete_structured(
             "invalid-model-name",
             1.0,
             "test system prompt",

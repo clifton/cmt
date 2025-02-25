@@ -1,6 +1,7 @@
 pub mod claude;
 pub mod openai;
 
+use crate::templates::TemplateData;
 use std::error::Error;
 use std::fmt::Debug;
 use std::sync::Arc;
@@ -19,30 +20,15 @@ pub trait AiProvider: Send + Sync + Debug {
     /// Check if the provider requires an API key
     fn requires_api_key(&self) -> bool;
 
-    /// Complete a prompt with the given model and parameters
-    fn complete(
+    /// Complete a prompt with the given model and parameters, returning structured data
+    /// This uses instructor mode to get structured data directly from the model
+    fn complete_structured(
         &self,
         model: &str,
         temperature: f32,
         system_prompt: &str,
         user_prompt: &str,
-    ) -> Result<String, Box<dyn Error>>;
-
-    /// Complete a prompt with streaming responses
-    fn complete_streaming(
-        &self,
-        _model: &str,
-        _temperature: f32,
-        _system_prompt: &str,
-        _user_prompt: &str,
-        _callback: Box<dyn FnMut(String) -> Result<(), Box<dyn Error>> + Send>,
-    ) -> Result<(), Box<dyn Error>> {
-        // Default implementation for providers that don't support streaming
-        Err(Box::new(std::io::Error::new(
-            std::io::ErrorKind::Unsupported,
-            format!("Streaming not supported by {}", self.name()),
-        )))
-    }
+    ) -> Result<TemplateData, Box<dyn Error>>;
 
     /// Get the default model for this provider
     fn default_model(&self) -> &str;
@@ -156,6 +142,7 @@ mod tests {
     use super::*;
     use crate::config::cli::Args;
     use crate::prompts::{SYSTEM_PROMPT, USER_PROMPT_TEMPLATE};
+    use crate::templates::TemplateData;
 
     #[derive(Debug)]
     struct MockProvider;
@@ -173,15 +160,22 @@ mod tests {
             false
         }
 
-        fn complete(
+        fn complete_structured(
             &self,
             _model: &str,
             _temperature: f32,
-            system_prompt: &str,
+            _system_prompt: &str,
             _user_prompt: &str,
-        ) -> Result<String, Box<dyn Error>> {
-            // Return the system prompt so we can verify its contents
-            Ok(system_prompt.to_string())
+        ) -> Result<TemplateData, Box<dyn Error>> {
+            // Return a mock TemplateData
+            Ok(TemplateData {
+                r#type: "feat".to_string(),
+                subject: "add structured completion".to_string(),
+                details: Some("- Implement structured completion\n- Add tests".to_string()),
+                issues: None,
+                breaking: None,
+                scope: Some("ai".to_string()),
+            })
         }
 
         fn default_model(&self) -> &str {
@@ -221,7 +215,7 @@ mod tests {
         let expected_system_prompt = format!("{}\n\nAdditional context: {}", SYSTEM_PROMPT, hint);
 
         let provider = MockProvider;
-        let result = provider.complete(
+        let result = provider.complete_structured(
             "test-model",
             0.3,
             &expected_system_prompt,
@@ -229,6 +223,27 @@ mod tests {
         );
 
         assert!(result.is_ok());
-        assert_eq!(result.unwrap(), expected_system_prompt);
+        assert_eq!(result.unwrap().r#type, "feat");
+    }
+
+    #[test]
+    fn test_structured_completion() {
+        let provider = MockProvider;
+        let result = provider.complete_structured(
+            "test-model",
+            0.3,
+            "test system prompt",
+            "test user prompt",
+        );
+
+        assert!(result.is_ok());
+        let data = result.unwrap();
+        assert_eq!(data.r#type, "feat");
+        assert_eq!(data.subject, "add structured completion");
+        assert_eq!(
+            data.details,
+            Some("- Implement structured completion\n- Add tests".to_string())
+        );
+        assert_eq!(data.scope, Some("ai".to_string()));
     }
 }

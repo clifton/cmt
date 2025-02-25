@@ -1,4 +1,4 @@
-use crate::ai::{AiError, AiProvider};
+use crate::ai::{parse_commit_template_json, AiError, AiProvider};
 use crate::templates::CommitTemplate;
 use reqwest::blocking::Client;
 use serde_json::{json, Value};
@@ -47,39 +47,21 @@ impl AiProvider for OpenAiProvider {
         let api_key = Self::get_api_key()?;
         let client = Client::new();
 
+        // Get the schema from the trait method
+        let schema = self.get_commit_template_schema();
+
+        // Extract the properties and required fields from the schema
+        let properties = schema["properties"].clone();
+        let required = schema["required"].clone();
+
         // Define the function schema for the commit message structure
         let function_schema = json!({
             "name": "generate_commit_message",
             "description": "Generate a structured commit message based on the changes",
             "parameters": {
                 "type": "object",
-                "properties": {
-                    "type": {
-                        "type": "string",
-                        "description": "The type of change (e.g., feat, fix, docs, style, refactor, test, chore)"
-                    },
-                    "subject": {
-                        "type": "string",
-                        "description": "A short description of the change"
-                    },
-                    "details": {
-                        "type": ["string", "null"],
-                        "description": "Optional detailed description of the change"
-                    },
-                    "issues": {
-                        "type": ["string", "null"],
-                        "description": "Optional references to issues"
-                    },
-                    "breaking": {
-                        "type": ["string", "null"],
-                        "description": "Optional description of breaking changes"
-                    },
-                    "scope": {
-                        "type": ["string", "null"],
-                        "description": "Optional scope of the change"
-                    }
-                },
-                "required": ["type", "subject"]
+                "properties": properties,
+                "required": required
             }
         });
 
@@ -179,14 +161,7 @@ impl AiProvider for OpenAiProvider {
             })?;
 
         // Parse the function arguments into CommitTemplate
-        let template_data: CommitTemplate = serde_json::from_str(function_args).map_err(|e| {
-            Box::new(AiError::JsonError {
-                message: format!(
-                    "Failed to parse function arguments as CommitTemplate: {}",
-                    e
-                ),
-            })
-        })?;
+        let template_data = parse_commit_template_json(function_args)?;
 
         Ok(template_data)
     }

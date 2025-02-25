@@ -2,12 +2,40 @@ pub mod claude;
 pub mod openai;
 
 use crate::templates::CommitTemplate;
+use lazy_static::lazy_static;
+use schemars::schema_for;
+use serde_json::Value;
 use std::error::Error;
 use std::fmt::Debug;
 use std::sync::Arc;
 
 pub const CLAUDE_DEFAULT_TEMP: f32 = 0.3;
 pub const OPENAI_DEFAULT_TEMP: f32 = 1.0;
+
+lazy_static! {
+    /// The JSON schema for CommitTemplate, generated once and reused
+    static ref COMMIT_TEMPLATE_SCHEMA: Value = {
+        let schema = schema_for!(CommitTemplate);
+        serde_json::to_value(schema).unwrap_or_else(|_| serde_json::json!({}))
+    };
+}
+
+/// Generate the JSON schema for CommitTemplate
+pub fn generate_commit_template_schema() -> Value {
+    COMMIT_TEMPLATE_SCHEMA.clone()
+}
+
+/// Parse a JSON string into a CommitTemplate
+pub fn parse_commit_template_json(json_str: &str) -> Result<CommitTemplate, Box<dyn Error>> {
+    serde_json::from_str(json_str).map_err(|e| {
+        Box::new(AiError::JsonError {
+            message: format!(
+                "Failed to parse response as CommitTemplate: {}. Response: {}",
+                e, json_str
+            ),
+        }) as Box<dyn Error>
+    })
+}
 
 /// Enhanced AI provider trait that supports more diverse providers
 pub trait AiProvider: Send + Sync + Debug {
@@ -29,6 +57,11 @@ pub trait AiProvider: Send + Sync + Debug {
         system_prompt: &str,
         user_prompt: &str,
     ) -> Result<CommitTemplate, Box<dyn Error>>;
+
+    /// Get the JSON schema for CommitTemplate
+    fn get_commit_template_schema(&self) -> Value {
+        generate_commit_template_schema()
+    }
 
     /// Get the default model for this provider
     fn default_model(&self) -> &str;

@@ -224,6 +224,7 @@ dependencies = [
  "dotenv",
  "git2",
  "handlebars",
+ "lazy_static",
  "mockito",
  "reqwest",
  "schemars",

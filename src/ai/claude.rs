@@ -1,4 +1,4 @@
-use crate::ai::{AiError, AiProvider};
+use crate::ai::{parse_commit_template_json, AiError, AiProvider};
 use crate::templates::CommitTemplate;
 use reqwest::blocking::Client;
 use serde_json::{json, Value};
@@ -47,19 +47,18 @@ impl AiProvider for ClaudeProvider {
         let api_key = Self::get_api_key()?;
         let client = Client::new();
 
+        // Get the schema from the trait method
+        let schema = self.get_commit_template_schema();
+
+        // Convert the schema to a pretty-printed string for the system prompt
+        let schema_str = serde_json::to_string_pretty(&schema).unwrap_or_default();
+
         // Create a system prompt that instructs the model to return JSON
         let json_system_prompt = format!(
             "{}\n\nYou MUST respond with a valid JSON object that matches this schema:\n\
-            {{\n\
-              \"type\": \"string\",\n\
-              \"subject\": \"string\",\n\
-              \"details\": \"string | null\",\n\
-              \"issues\": \"string | null\",\n\
-              \"breaking\": \"string | null\",\n\
-              \"scope\": \"string | null\"\n\
-            }}\n\
+            {}\n\
             Do not include any explanations or text outside of the JSON object.",
-            system_prompt
+            system_prompt, schema_str
         );
 
         let response = client
@@ -134,18 +133,8 @@ impl AiProvider for ClaudeProvider {
             // Extract the JSON object from the response
             let content = content.trim();
 
-            // Parse the JSON response into TemplateData
-            let template_data: CommitTemplate = match serde_json::from_str(content) {
-                Ok(data) => data,
-                Err(e) => {
-                    return Err(Box::new(AiError::JsonError {
-                        message: format!(
-                            "Failed to parse response as TemplateData: {}. Response: {}",
-                            e, content
-                        ),
-                    }));
-                }
-            };
+            // Parse the JSON response into CommitTemplate
+            let template_data = parse_commit_template_json(content)?;
 
             Ok(template_data)
         } else {

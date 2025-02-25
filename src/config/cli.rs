@@ -24,14 +24,6 @@ pub struct Args {
     #[arg(long)]
     pub model: Option<String>,
 
-    /// Use OpenAI
-    #[arg(long)]
-    pub openai: bool,
-
-    /// Use Anthropic (default)
-    #[arg(long, default_value_t = true)]
-    pub anthropic: bool,
-
     /// Adjust the creativity of the generated message (0.0 to 2.0)
     #[arg(short, long)]
     pub temperature: Option<f32>,
@@ -47,15 +39,35 @@ pub struct Args {
     /// Maximum line width for diffs
     #[arg(long, default_value_t = 300)]
     pub max_line_width: usize,
+
+    /// Use a specific template for the commit message
+    #[arg(long)]
+    pub template: Option<String>,
+
+    /// Include recent commits for context
+    #[arg(long, default_value_t = true)]
+    pub include_recent_commits: bool,
+
+    /// Number of recent commits to include for context
+    #[arg(long, default_value_t = 5)]
+    pub recent_commits_count: usize,
+
+    /// Create a new configuration file
+    #[arg(long)]
+    pub init_config: bool,
+
+    /// Path to save the configuration file (defaults to .cmt.toml in current directory)
+    #[arg(long)]
+    pub config_path: Option<String>,
+
+    /// Use a specific provider (claude, openai, etc.)
+    #[arg(long, default_value = "claude")]
+    pub provider: String,
 }
 
 impl Args {
     pub fn new_from(args: impl Iterator<Item = String>) -> Self {
-        let mut parsed = Self::parse_from(args);
-        if parsed.openai {
-            parsed.anthropic = false;
-        }
-        parsed
+        Self::parse_from(args)
     }
 }
 
@@ -71,10 +83,13 @@ mod tests {
         assert!(!args.show_raw_diff);
         assert_eq!(args.context_lines, 12);
         assert!(args.model.is_none());
-        assert!(!args.openai);
-        assert!(args.anthropic);
         assert!(args.temperature.is_none());
         assert!(args.hint.is_none());
+        assert!(args.include_recent_commits);
+        assert_eq!(args.recent_commits_count, 5);
+        assert!(!args.init_config);
+        assert!(args.config_path.is_none());
+        assert_eq!(args.provider, "claude");
     }
 
     #[test]
@@ -84,6 +99,21 @@ mod tests {
 
         let args = Args::new_from(["cmt", "-m"].iter().map(ToString::to_string));
         assert!(args.message_only);
+    }
+
+    #[test]
+    fn test_provider_option() {
+        // Explicit provider should be used
+        let args = Args::new_from(
+            ["cmt", "--provider", "openai"]
+                .iter()
+                .map(ToString::to_string),
+        );
+        assert_eq!(args.provider, "openai");
+
+        // Default should be claude
+        let args = Args::new_from(["cmt"].iter().map(ToString::to_string));
+        assert_eq!(args.provider, "claude");
     }
 
     #[test]
@@ -97,19 +127,6 @@ mod tests {
         let model = "gpt-4";
         let args = Args::new_from(["cmt", "--model", model].iter().map(ToString::to_string));
         assert_eq!(args.model, Some(model.to_string()));
-    }
-
-    #[test]
-    fn test_provider_flags() {
-        // Default is Anthropic
-        let args = Args::new_from(["cmt"].iter().map(ToString::to_string));
-        assert!(args.anthropic);
-        assert!(!args.openai);
-
-        // Switch to OpenAI
-        let args = Args::new_from(["cmt", "--openai"].iter().map(ToString::to_string));
-        assert!(!args.anthropic);
-        assert!(args.openai);
     }
 
     #[test]
@@ -159,8 +176,6 @@ mod tests {
         assert!(args.message_only);
         assert!(args.no_diff_stats);
         assert_eq!(args.model, Some("gpt-4".to_string()));
-        assert!(args.openai);
-        assert!(!args.anthropic);
         assert_eq!(args.temperature, Some(0.8));
         assert_eq!(args.hint, Some("Fix the login bug".to_string()));
     }

@@ -5,8 +5,8 @@
 ## Features
 
 - 🤖 Supports multiple AI models:
-  - Anthropic's Claude 3.5 Sonnet (default, temperature 0.3)
-  - OpenAI's GPT-4 Optimized (temperature 1.0)
+  - Anthropic's Claude Sonnet 3.7 (default)
+  - OpenAI's GPT-4o
 - 📝 Follows conventional commit format (`type: subject`)
 - 💡 Contextual hints to guide message generation
 
@@ -72,7 +72,7 @@ git add .
 cmt
 
 # Generate a commit message using OpenAI
-cmt --openai
+cmt --provider openai
 
 # Use the generated message directly with git
 git commit -F <(cmt --message-only)
@@ -81,6 +81,8 @@ git commit -F <(cmt --message-only)
 ### Command-line Options
 
 ```
+CLI tool that generates commit messages using AI
+
 Usage: cmt [OPTIONS]
 
 Options:
@@ -93,11 +95,7 @@ Options:
       --context-lines <CONTEXT_LINES>
           Number of context lines to show in the git diff [default: 12]
       --model <MODEL>
-          Use a specific AI model (defaults to claude-3-5-sonnet-latest or gpt-4o depending on provider)
-      --openai
-          Use OpenAI
-      --anthropic
-          Use Anthropic (default)
+          Use a specific AI model (defaults to claude-3-7-sonnet-latest or gpt-4o depending on provider)
   -t, --temperature <TEMPERATURE>
           Adjust the creativity of the generated message (0.0 to 2.0)
       --hint <HINT>
@@ -106,6 +104,18 @@ Options:
           Number of maximum lines to show per file in the git diff [default: 500]
       --max-line-width <MAX_LINE_WIDTH>
           Maximum line width for diffs [default: 300]
+      --template <TEMPLATE>
+          Use a specific template for the commit message
+      --include-recent-commits
+          Include recent commits for context
+      --recent-commits-count <RECENT_COMMITS_COUNT>
+          Number of recent commits to include for context [default: 5]
+      --init-config
+          Create a new configuration file
+      --config-path <CONFIG_PATH>
+          Path to save the configuration file (defaults to .cmt.toml in current directory)
+      --provider <PROVIDER>
+          Use a specific provider (claude, openai, etc.) [default: claude]
   -h, --help
           Print help
   -V, --version
@@ -125,13 +135,13 @@ cmt --show-raw-diff
 cmt --no-diff-stats
 
 # Use OpenAI with a custom temperature
-cmt --openai --temperature 0.8
+cmt --provider openai --temperature 0.8
 
 # Provide a hint for context
 cmt --hint "This fixes the login timeout issue"
 
 # Combine multiple options
-cmt --openai --model gpt-4 --hint "Update dependencies for security"
+cmt --provider openai --model gpt-4o --hint "Update dependencies for security"
 
 # Use with git commit directly
 git commit -F <(cmt --message-only --hint "Refactor to improve performance")

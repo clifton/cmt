@@ -19,7 +19,7 @@ test_provider() {
     fi
 
     # Create and stage a test file with meaningful content
-    local test_file="test_${provider}.txt"
+    local test_file="test_${provider// /_}.txt"
     echo "Feature: User Authentication
 - Add login form component
 - Implement password validation
@@ -117,13 +117,13 @@ echo "✓ Diff statistics display working"
 test_provider "Claude" "" ""
 
 # Test OpenAI
-test_provider "OpenAI" "--openai" ""
+test_provider "OpenAI" "--provider openai" ""
 
 # Test Claude with hint
 test_provider "Claude with hint" "" "Fix the login timeout issue"
 
 # Test OpenAI with hint
-test_provider "OpenAI with hint" "--openai" "Update API documentation"
+test_provider "OpenAI with hint" "--provider openai" "Update API documentation"
 
 echo -e "\n✨ All integration tests passed!"
 

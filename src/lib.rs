@@ -79,8 +79,9 @@ pub fn generate_commit_message(
                             println!("Available models: {}", sorted_models.join(", "));
 
                             return Err(format!(
-                                "Invalid model: {}\nAvailable models:{}",
+                                "Invalid model: {} for provider: {}\nAvailable models:{}",
                                 model,
+                                provider_name,
                                 sorted_models
                                     .iter()
                                     .map(|model| format!("\n  • {}", model))

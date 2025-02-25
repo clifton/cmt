@@ -117,6 +117,54 @@ impl AiProvider for OpenAiProvider {
     fn is_available(&self) -> bool {
         Self::get_api_key().is_ok()
     }
+
+    fn fetch_available_models(&self) -> Result<Vec<String>, Box<dyn Error>> {
+        let api_key = Self::get_api_key()?;
+        let client = Client::new();
+
+        let response = client
+            .get(format!("{}/v1/models", Self::api_base_url()))
+            .header("Authorization", format!("Bearer {}", api_key))
+            .header("Content-Type", "application/json")
+            .send()
+            .map_err(|e| format!("Failed to fetch models: {}", e))?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let error_text = response
+                .text()
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(format!("API error (status {}): {}", status, error_text).into());
+        }
+
+        let json: Value = response
+            .json()
+            .map_err(|e| format!("Failed to parse JSON: {}", e))?;
+
+        let models = json
+            .get("data")
+            .and_then(|data| data.as_array())
+            .map(|models_array| {
+                models_array
+                    .iter()
+                    .filter_map(|model| model.get("id").and_then(|id| id.as_str()))
+                    .filter(|id| id.starts_with("gpt-")) // Only include GPT models
+                    .map(|id| id.to_string())
+                    .collect::<Vec<String>>()
+            })
+            .unwrap_or_default();
+
+        // If we couldn't get any models, return a default list
+        if models.is_empty() {
+            return Ok(vec![
+                "gpt-4o".to_string(),
+                "gpt-4".to_string(),
+                "gpt-3.5-turbo".to_string(),
+            ]);
+        }
+
+        Ok(models)
+    }
 }
 
 #[cfg(test)]
@@ -225,5 +273,70 @@ mod tests {
         assert_eq!(message, "test commit message");
 
         mock.assert();
+    }
+
+    #[test]
+    #[serial]
+    fn test_invalid_model_error() {
+        let mut server = setup();
+        let mock = server
+            .mock("POST", "/v1/chat/completions")
+            .match_header("Authorization", "Bearer test-api-key")
+            .with_status(404)
+            .with_body(
+                r#"{
+                "error": {
+                    "message": "The model 'invalid-model-name' does not exist",
+                    "type": "invalid_request_error",
+                    "param": "model",
+                    "code": "model_not_found"
+                }
+            }"#,
+            )
+            .create();
+
+        // Also mock the models endpoint for fetch_available_models
+        let models_mock = server
+            .mock("GET", "/v1/models")
+            .match_header("Authorization", "Bearer test-api-key")
+            .with_status(200)
+            .with_body(
+                r#"{
+                "data": [
+                    {"id": "gpt-4o", "object": "model"},
+                    {"id": "gpt-4", "object": "model"},
+                    {"id": "gpt-3.5-turbo", "object": "model"},
+                    {"id": "text-embedding-ada-002", "object": "model"}
+                ]
+            }"#,
+            )
+            .create();
+
+        let provider = OpenAiProvider::new();
+        let result = provider.complete(
+            "invalid-model-name",
+            1.0,
+            "test system prompt",
+            "test user prompt",
+        );
+
+        // Verify that an error is returned
+        assert!(result.is_err());
+
+        // Check that the error message contains the expected text
+        let error = result.unwrap_err().to_string();
+        assert!(error.contains("does not exist"));
+        assert!(error.contains("invalid-model-name"));
+
+        // Test that fetch_available_models returns the expected models
+        let models = provider.fetch_available_models().unwrap();
+        assert!(!models.is_empty());
+        assert!(models.contains(&"gpt-4o".to_string()));
+        assert!(models.contains(&"gpt-4".to_string()));
+        assert!(models.contains(&"gpt-3.5-turbo".to_string()));
+        assert!(!models.contains(&"text-embedding-ada-002".to_string())); // Should be filtered out
+
+        mock.assert();
+        models_mock.assert();
     }
 }

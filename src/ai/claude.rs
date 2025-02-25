@@ -83,6 +83,18 @@ impl AiProvider for ClaudeProvider {
             let error_text = response
                 .text()
                 .unwrap_or_else(|_| "Unknown error".to_string());
+
+            // Check if this is a model-related error
+            if error_text.contains("model")
+                && (status.as_u16() == 404 || error_text.contains("not found"))
+            {
+                return Err(format!(
+                    "The model `{}` does not exist or you do not have access to it.",
+                    model
+                )
+                .into());
+            }
+
             return Err(format!("API error (status {}): {}", status, error_text).into());
         }
 
@@ -113,6 +125,19 @@ impl AiProvider for ClaudeProvider {
 
     fn is_available(&self) -> bool {
         Self::get_api_key().is_ok()
+    }
+
+    fn fetch_available_models(&self) -> Result<Vec<String>, Box<dyn Error>> {
+        // Anthropic doesn't have a public models endpoint yet, so we'll return a curated list
+        // This could be updated in the future when Anthropic adds a models endpoint
+        Ok(vec![
+            "claude-3-5-sonnet-20240620".to_string(),
+            "claude-3-opus-20240229".to_string(),
+            "claude-3-sonnet-20240229".to_string(),
+            "claude-3-haiku-20240307".to_string(),
+            "claude-2.1".to_string(),
+            "claude-2.0".to_string(),
+        ])
     }
 }
 
@@ -228,6 +253,50 @@ mod tests {
         assert!(result.is_ok());
         let message = result.unwrap();
         assert_eq!(message, "test commit message");
+
+        mock.assert();
+    }
+
+    #[test]
+    #[serial]
+    fn test_invalid_model_error() {
+        let mut server = setup();
+        let mock = server
+            .mock("POST", "/v1/messages")
+            .match_header("x-api-key", "test-api-key")
+            .with_status(404)
+            .with_body(
+                r#"{
+                "type": "error",
+                "error": {
+                    "type": "not_found_error",
+                    "message": "model: invalid-model-name"
+                }
+            }"#,
+            )
+            .create();
+
+        let provider = ClaudeProvider::new();
+        let result = provider.complete(
+            "invalid-model-name",
+            0.3,
+            "test system prompt",
+            "test user prompt",
+        );
+
+        // Verify that an error is returned
+        assert!(result.is_err());
+
+        // Check that the error message contains the expected text
+        let error = result.unwrap_err().to_string();
+        assert!(error.contains("does not exist"));
+        assert!(error.contains("invalid-model-name"));
+
+        // Test that fetch_available_models returns the expected models
+        let models = provider.fetch_available_models().unwrap();
+        assert!(!models.is_empty());
+        assert!(models.contains(&"claude-3-5-sonnet-20240620".to_string()));
+        assert!(models.contains(&"claude-3-opus-20240229".to_string()));
 
         mock.assert();
     }

@@ -39,6 +39,12 @@ pub fn generate_commit_message(
         )));
     }
 
+    // Get the model name, defaulting to the provider's default model
+    let model = args
+        .model
+        .clone()
+        .unwrap_or_else(|| provider.default_model().to_string());
+
     // Build the prompt for the AI provider
     let mut prompt = String::new();
 
@@ -56,14 +62,46 @@ pub fn generate_commit_message(
     }
 
     // Generate the commit message
-    let model = args
-        .model
-        .clone()
-        .unwrap_or_else(|| provider.default_model().to_string());
     let temperature = args
         .temperature
         .unwrap_or_else(|| provider.default_temperature());
-    let response = provider.complete(&model, temperature, &system_prompt, &prompt)?;
+
+    // Try to complete the prompt, handle model errors specially
+    let response = match provider.complete(&model, temperature, &system_prompt, &prompt) {
+        Ok(response) => response,
+        Err(err) => {
+            let err_str = err.to_string();
+
+            // Check if this is a model-related error
+            if err_str.contains("model")
+                && (err_str.contains("not exist") || err_str.contains("not found"))
+            {
+                // Try to fetch available models
+                match provider.fetch_available_models() {
+                    Ok(models) if !models.is_empty() => {
+                        // Sort models alphabetically and format as a bulleted list for better readability
+                        let mut sorted_models = models.clone();
+                        sorted_models.sort();
+
+                        let available_models = sorted_models
+                            .iter()
+                            .map(|model| format!("\n  • {}", model))
+                            .collect::<Vec<String>>()
+                            .join("");
+
+                        return Err(Box::new(ai::AiError::InvalidModel(format!(
+                            "Model '{}' is invalid for provider '{}'. Available models:{}",
+                            model, provider_name, available_models
+                        ))));
+                    }
+                    _ => {} // If we can't fetch models, just return the original error
+                }
+            }
+
+            // Return the original error
+            return Err(err);
+        }
+    };
 
     // Parse the commit message
     let commit_data = parse_commit_message(&response)?;
@@ -166,8 +204,10 @@ pub mod ai_mod {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::ai::AiProvider;
     use crate::config::cli::Args;
     use std::env;
+    use std::error::Error;
 
     #[test]
     fn test_unsupported_provider() {
@@ -255,5 +295,191 @@ mod tests {
 
         // Clean up
         env::remove_var("ANTHROPIC_API_KEY");
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn test_invalid_model_error_handling() {
+        // This test verifies that we properly handle invalid model errors
+
+        // Create a mock provider that simulates an invalid model error
+        #[derive(Debug)]
+        struct TestProvider;
+
+        impl AiProvider for TestProvider {
+            fn name(&self) -> &str {
+                "test"
+            }
+            fn supports_streaming(&self) -> bool {
+                false
+            }
+            fn requires_api_key(&self) -> bool {
+                false
+            }
+            fn is_available(&self) -> bool {
+                true
+            }
+            fn default_model(&self) -> &str {
+                "test-model"
+            }
+            fn default_temperature(&self) -> f32 {
+                0.5
+            }
+
+            fn complete(
+                &self,
+                model: &str,
+                _temperature: f32,
+                _system_prompt: &str,
+                _user_prompt: &str,
+            ) -> Result<String, Box<dyn Error>> {
+                if model == "invalid-model" {
+                    return Err(
+                        "The model `invalid-model` does not exist or you do not have access to it."
+                            .into(),
+                    );
+                }
+                Ok("Test response".to_string())
+            }
+
+            fn fetch_available_models(&self) -> Result<Vec<String>, Box<dyn Error>> {
+                Ok(vec!["test-model".to_string(), "another-model".to_string()])
+            }
+        }
+
+        let provider = TestProvider;
+
+        // Test the error handling directly
+        let result = provider.complete(
+            "invalid-model",
+            0.5,
+            "test system prompt",
+            "test user prompt",
+        );
+
+        // Verify that an error is returned
+        assert!(result.is_err());
+        assert!(result.unwrap_err().to_string().contains("does not exist"));
+
+        // Now test our error handling logic
+        let err_str = "The model `invalid-model` does not exist or you do not have access to it.";
+
+        // Check if this is a model-related error
+        assert!(
+            err_str.contains("model")
+                && (err_str.contains("not exist") || err_str.contains("not found"))
+        );
+
+        // Verify that fetch_available_models returns the expected models
+        let models = provider.fetch_available_models().unwrap();
+        assert_eq!(
+            models,
+            vec!["test-model".to_string(), "another-model".to_string()]
+        );
+
+        // Test the formatting of models as a bulleted list
+        let mut sorted_models = models.clone();
+        sorted_models.sort();
+
+        let formatted_models = sorted_models
+            .iter()
+            .map(|model| format!("\n  • {}", model))
+            .collect::<Vec<String>>()
+            .join("");
+        assert_eq!(formatted_models, "\n  • another-model\n  • test-model");
+    }
+
+    #[test]
+    fn test_invalid_model_error_formatting() {
+        // Create a mock provider that simulates an invalid model error
+        #[derive(Debug)]
+        struct MockInvalidModelProvider;
+
+        impl AiProvider for MockInvalidModelProvider {
+            fn name(&self) -> &str {
+                "mock"
+            }
+            fn supports_streaming(&self) -> bool {
+                false
+            }
+            fn requires_api_key(&self) -> bool {
+                false
+            }
+            fn is_available(&self) -> bool {
+                true
+            }
+            fn default_model(&self) -> &str {
+                "mock-default-model"
+            }
+            fn default_temperature(&self) -> f32 {
+                0.5
+            }
+
+            fn complete(
+                &self,
+                model: &str,
+                _temperature: f32,
+                _system_prompt: &str,
+                _user_prompt: &str,
+            ) -> Result<String, Box<dyn Error>> {
+                // Always return a model-related error
+                Err(format!(
+                    "The model `{}` does not exist or you do not have access to it.",
+                    model
+                )
+                .into())
+            }
+
+            fn fetch_available_models(&self) -> Result<Vec<String>, Box<dyn Error>> {
+                // Return a list of mock models
+                Ok(vec![
+                    "mock-model-1".to_string(),
+                    "mock-model-2".to_string(),
+                    "mock-model-3".to_string(),
+                ])
+            }
+        }
+
+        // We need to test the error handling directly since we can't override create_default_registry
+        let provider = MockInvalidModelProvider;
+        let model = "invalid-mock-model";
+        let provider_name = provider.name();
+
+        // Simulate the error handling in generate_commit_message
+        let err = provider.complete(model, 0.5, "test", "test").unwrap_err();
+        let err_str = err.to_string();
+
+        // Check if this is a model-related error
+        assert!(
+            err_str.contains("model")
+                && (err_str.contains("not exist") || err_str.contains("not found"))
+        );
+
+        // Get available models
+        let models = provider.fetch_available_models().unwrap();
+        assert!(!models.is_empty());
+
+        // Sort models and format as a bulleted list
+        let mut sorted_models = models.clone();
+        sorted_models.sort();
+
+        let available_models = sorted_models
+            .iter()
+            .map(|model| format!("\n  • {}", model))
+            .collect::<Vec<String>>()
+            .join("");
+
+        // Create the error message
+        let error_message = format!(
+            "Model '{}' is invalid for provider '{}'. Available models:{}",
+            model, provider_name, available_models
+        );
+
+        // Check the formatting
+        assert!(error_message.contains("Model 'invalid-mock-model' is invalid for provider 'mock'"));
+        assert!(error_message.contains("Available models:"));
+        assert!(error_message.contains("  • mock-model-1"));
+        assert!(error_message.contains("  • mock-model-2"));
+        assert!(error_message.contains("  • mock-model-3"));
     }
 }

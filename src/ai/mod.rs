@@ -52,6 +52,10 @@ pub trait AiProvider: Send + Sync + Debug {
 
     /// Check if the provider is available (API key set, etc.)
     fn is_available(&self) -> bool;
+
+    /// Fetch available models from the API
+    /// This is called only after receiving an error about an invalid model
+    fn fetch_available_models(&self) -> Result<Vec<String>, Box<dyn Error>>;
 }
 
 /// Provider registry for managing available AI providers
@@ -136,6 +140,9 @@ pub enum AiError {
 
     #[error("Invalid configuration: {0}")]
     InvalidConfig(String),
+
+    #[error("Invalid model: {0}")]
+    InvalidModel(String),
 }
 
 #[cfg(test)]
@@ -181,6 +188,10 @@ mod tests {
 
         fn is_available(&self) -> bool {
             true
+        }
+
+        fn fetch_available_models(&self) -> Result<Vec<String>, Box<dyn Error>> {
+            Ok(vec!["mock-model".to_string(), "mock-model-2".to_string()])
         }
     }
 

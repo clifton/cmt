@@ -64,7 +64,7 @@ impl AiProvider for ClaudeProvider {
             }))
             .send()
             .map_err(|e| {
-                if e.is_timeout() {
+                let error_msg = if e.is_timeout() {
                     format!("Request timed out: {}", e)
                 } else if e.is_connect() {
                     format!(
@@ -75,7 +75,8 @@ impl AiProvider for ClaudeProvider {
                     format!("API error (status {}): {}", status, e)
                 } else {
                     format!("Unknown error: {}", e)
-                }
+                };
+                Box::new(AiError::ApiError(error_msg))
             })?;
 
         let status = response.status();
@@ -88,19 +89,21 @@ impl AiProvider for ClaudeProvider {
             if error_text.contains("model")
                 && (status.as_u16() == 404 || error_text.contains("not found"))
             {
-                return Err(format!(
+                return Err(Box::new(AiError::InvalidModel(format!(
                     "The model `{}` does not exist or you do not have access to it.",
                     model
-                )
-                .into());
+                ))));
             }
 
-            return Err(format!("API error (status {}): {}", status, error_text).into());
+            return Err(Box::new(AiError::ApiError(format!(
+                "API error (status {}): {}",
+                status, error_text
+            ))));
         }
 
         let json: Value = response
             .json()
-            .map_err(|e| format!("Failed to parse JSON: {}", e))?;
+            .map_err(|e| Box::new(AiError::ApiError(format!("Failed to parse JSON: {}", e))))?;
 
         if let Some(content) = json
             .get("content")
@@ -111,7 +114,9 @@ impl AiProvider for ClaudeProvider {
         {
             Ok(content.trim().to_string())
         } else {
-            Err("Failed to extract content from response".into())
+            Err(Box::new(AiError::ApiError(
+                "Failed to extract content from response".to_string(),
+            )))
         }
     }
 
@@ -138,19 +143,22 @@ impl AiProvider for ClaudeProvider {
             .header("anthropic-version", "2023-06-01")
             .header("content-type", "application/json")
             .send()
-            .map_err(|e| format!("Failed to fetch models: {}", e))?;
+            .map_err(|e| Box::new(AiError::ApiError(format!("Failed to fetch models: {}", e))))?;
 
         let status = response.status();
         if !status.is_success() {
             let error_text = response
                 .text()
                 .unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(format!("API error (status {}): {}", status, error_text).into());
+            return Err(Box::new(AiError::ApiError(format!(
+                "API error (status {}): {}",
+                status, error_text
+            ))));
         }
 
         let json: Value = response
             .json()
-            .map_err(|e| format!("Failed to parse JSON: {}", e))?;
+            .map_err(|e| Box::new(AiError::ApiError(format!("Failed to parse JSON: {}", e))))?;
 
         // Extract model IDs from the response
         let mut models = json
@@ -167,7 +175,9 @@ impl AiProvider for ClaudeProvider {
 
         // If we couldn't get any models, return a fallback list
         if models.is_empty() {
-            return Err("Failed to fetch available models from the API".into());
+            return Err(Box::new(AiError::ApiError(
+                "Failed to fetch available models from the API".to_string(),
+            )));
         }
 
         // models ending in -latest do not show up in the API response

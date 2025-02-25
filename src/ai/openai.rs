@@ -1,5 +1,5 @@
 use crate::ai::{AiError, AiProvider};
-use crate::templates::TemplateData;
+use crate::templates::CommitTemplate;
 use reqwest::blocking::Client;
 use serde_json::{json, Value};
 use std::{env, error::Error};
@@ -43,7 +43,7 @@ impl AiProvider for OpenAiProvider {
         temperature: f32,
         system_prompt: &str,
         user_prompt: &str,
-    ) -> Result<TemplateData, Box<dyn Error>> {
+    ) -> Result<CommitTemplate, Box<dyn Error>> {
         let api_key = Self::get_api_key()?;
         let client = Client::new();
 
@@ -178,10 +178,13 @@ impl AiProvider for OpenAiProvider {
                 }) as Box<dyn Error>
             })?;
 
-        // Parse the function arguments into TemplateData
-        let template_data: TemplateData = serde_json::from_str(function_args).map_err(|e| {
+        // Parse the function arguments into CommitTemplate
+        let template_data: CommitTemplate = serde_json::from_str(function_args).map_err(|e| {
             Box::new(AiError::JsonError {
-                message: format!("Failed to parse function arguments as TemplateData: {}", e),
+                message: format!(
+                    "Failed to parse function arguments as CommitTemplate: {}",
+                    e
+                ),
             })
         })?;
 
@@ -263,6 +266,7 @@ impl AiProvider for OpenAiProvider {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::templates::CommitType;
     use mockito::Server;
     use serial_test::serial;
 
@@ -307,7 +311,7 @@ mod tests {
             provider.complete_structured("gpt-4o", 1.0, "test system prompt", "test user prompt");
         assert!(result.is_ok());
         let message = result.unwrap();
-        assert_eq!(message.r#type, "feat");
+        assert_eq!(message.r#type, CommitType::Feat);
         assert_eq!(message.subject, "add new feature");
         assert_eq!(
             message.details,
@@ -383,7 +387,7 @@ mod tests {
         );
         assert!(result.is_ok());
         let message = result.unwrap();
-        assert_eq!(message.r#type, "test");
+        assert_eq!(message.r#type, CommitType::Test);
         assert_eq!(message.subject, "test commit message");
 
         mock.assert();

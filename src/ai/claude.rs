@@ -1,5 +1,5 @@
 use crate::ai::{AiError, AiProvider};
-use crate::templates::TemplateData;
+use crate::templates::CommitTemplate;
 use reqwest::blocking::Client;
 use serde_json::{json, Value};
 use std::{env, error::Error};
@@ -43,7 +43,7 @@ impl AiProvider for ClaudeProvider {
         temperature: f32,
         system_prompt: &str,
         user_prompt: &str,
-    ) -> Result<TemplateData, Box<dyn Error>> {
+    ) -> Result<CommitTemplate, Box<dyn Error>> {
         let api_key = Self::get_api_key()?;
         let client = Client::new();
 
@@ -135,7 +135,7 @@ impl AiProvider for ClaudeProvider {
             let content = content.trim();
 
             // Parse the JSON response into TemplateData
-            let template_data: TemplateData = match serde_json::from_str(content) {
+            let template_data: CommitTemplate = match serde_json::from_str(content) {
                 Ok(data) => data,
                 Err(e) => {
                     return Err(Box::new(AiError::JsonError {
@@ -285,7 +285,7 @@ mod tests {
         );
         assert!(result.is_ok());
         let message = result.unwrap();
-        assert_eq!(message.r#type, "feat");
+        assert_eq!(message.r#type, crate::templates::CommitType::Feat);
         assert_eq!(message.subject, "add new feature");
         assert_eq!(
             message.details,
@@ -322,7 +322,6 @@ mod tests {
         );
         assert!(result.is_err());
         let error = result.unwrap_err().to_string();
-        println!("Actual Claude API error: {}", error);
 
         // The error should contain either the exact message or indicate an API error
         assert!(
@@ -362,7 +361,7 @@ mod tests {
         );
         assert!(result.is_ok());
         let message = result.unwrap();
-        assert_eq!(message.r#type, "test");
+        assert_eq!(message.r#type, crate::templates::CommitType::Test);
         assert_eq!(message.subject, "test commit message");
 
         mock.assert();

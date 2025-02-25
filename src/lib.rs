@@ -113,7 +113,7 @@ pub mod config_mod {
 
 // Re-export the templates module for external use
 pub mod template_mod {
-    pub use crate::templates::{TemplateData, TemplateError, TemplateManager};
+    pub use crate::templates::{CommitTemplate, TemplateError, TemplateManager};
 }
 
 // Re-export the ai module for external use
@@ -127,7 +127,7 @@ mod tests {
     use super::*;
     use crate::ai::{AiError, AiProvider};
     use crate::config::cli::Args;
-    use crate::templates::TemplateData;
+    use crate::templates::CommitTemplate;
     use std::env;
     use std::error::Error;
 
@@ -254,15 +254,15 @@ mod tests {
                 _temperature: f32,
                 _system_prompt: &str,
                 _user_prompt: &str,
-            ) -> Result<TemplateData, Box<dyn Error>> {
+            ) -> Result<CommitTemplate, Box<dyn Error>> {
                 if model == "invalid-model" {
                     return Err(
                         "The model `invalid-model` does not exist or you do not have access to it."
                             .into(),
                     );
                 }
-                Ok(TemplateData {
-                    r#type: "test".to_string(),
+                Ok(CommitTemplate {
+                    r#type: crate::templates::CommitType::Test,
                     subject: "test response".to_string(),
                     details: None,
                     issues: None,
@@ -350,7 +350,7 @@ mod tests {
                 _temperature: f32,
                 _system_prompt: &str,
                 _user_prompt: &str,
-            ) -> Result<TemplateData, Box<dyn Error>> {
+            ) -> Result<CommitTemplate, Box<dyn Error>> {
                 Err(AiError::InvalidModel {
                     model: model.to_string(),
                 }

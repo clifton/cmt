@@ -5,6 +5,8 @@ use std::fs;
 use std::path::Path;
 
 use handlebars::Handlebars;
+use schemars::schema::{Metadata, Schema};
+use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -42,21 +44,169 @@ impl From<handlebars::RenderError> for TemplateError {
     }
 }
 
-/// Template data for rendering
-#[derive(Debug, Serialize, Deserialize)]
-pub struct TemplateData {
-    pub r#type: String,
+// Enum for commit types with lowercase serialization
+#[derive(Debug, Serialize, Deserialize, PartialEq, JsonSchema)]
+#[serde(rename_all = "lowercase")]
+#[schemars(description = "The type of a commit message. Choose based on the nature of the change.")]
+#[schemars(title = "Commit Type")]
+pub enum CommitType {
+    #[schemars(
+        description = "A new feature or enhancement (not docs/readme). E.g., adding a login system."
+    )]
+    Feat,
+    #[schemars(description = "A bug fix or error correction. E.g., fixing a crash in the parser.")]
+    Fix,
+    #[schemars(
+        description = "Code restructuring without behavior change. E.g., splitting a large function."
+    )]
+    Refactor,
+    #[schemars(
+        description = "Routine maintenance or updates (e.g., dependency bumps). E.g., updating serde."
+    )]
+    Chore,
+    #[schemars(
+        description = "Documentation updates (e.g., README, comments). E.g., adding API docs."
+    )]
+    Docs,
+    #[schemars(
+        description = "Formatting or stylistic changes (e.g., linting). E.g., fixing whitespace."
+    )]
+    Style,
+    #[schemars(description = "Test additions or updates. E.g., adding unit tests for a feature.")]
+    Test,
+    #[schemars(description = "Build system or script changes. E.g., updating the Dockerfile.")]
+    Build,
+    #[schemars(
+        description = "CI/CD configuration updates. E.g., modifying a GitHub Actions workflow."
+    )]
+    Ci,
+    #[schemars(description = "Performance improvements. E.g., optimizing a query execution time.")]
+    Perf,
+}
+
+// Helper function to add examples and title to schema
+fn schema_with_examples<T: JsonSchema>(
+    gen: &mut schemars::gen::SchemaGenerator,
+    examples: Vec<serde_json::Value>,
+    title: &str,
+) -> Schema {
+    let mut schema = T::json_schema(gen);
+    if let Schema::Object(obj) = &mut schema {
+        let metadata = obj
+            .metadata
+            .get_or_insert_with(|| Box::new(Metadata::default()));
+        metadata.examples = examples;
+        metadata.title = Some(title.to_string());
+    }
+    schema
+}
+
+// Macro to generate schema functions with examples and titles
+macro_rules! define_schema_fns {
+    ($(
+        $fn_name:ident: $type:ty => {
+            title: $title:expr,
+            examples: [$($example:expr),+]
+        }
+    ),*) => {
+        $(
+            fn $fn_name(gen: &mut schemars::gen::SchemaGenerator) -> Schema {
+                schema_with_examples::<$type>(gen, vec![$($example),+], $title)
+            }
+        )*
+    };
+}
+
+// Define all schema functions using the macro
+define_schema_fns! {
+    subject_schema: String => {
+        title: "Subject",
+        examples: [
+            json!("add user login endpoint"),
+            json!("fix memory leak in image processing")
+        ]
+    },
+    details_schema: Option<String> => {
+        title: "Details",
+        examples: [
+            json!("- Add JWT auth for security\n- Update tests for coverage"),
+            json!("- Fix memory leak when processing large images\n- Add unit tests to prevent regression")
+        ]
+    },
+    issues_schema: Option<String> => {
+        title: "Issues",
+        examples: [
+            json!("#123"),
+            json!("Fixes #456"),
+            json!("Resolves #789, #101")
+        ]
+    },
+    breaking_schema: Option<String> => {
+        title: "Breaking Changes",
+        examples: [
+            json!("Drop support for old API"),
+            json!("Change authentication flow")
+        ]
+    },
+    scope_schema: Option<String> => {
+        title: "Scope",
+        examples: [
+            json!("auth"),
+            json!("ui"),
+            json!("api"),
+            json!("db")
+        ]
+    }
+}
+
+// Struct for commit template with JSON-friendly fields
+#[derive(Debug, Serialize, Deserialize, PartialEq, JsonSchema)]
+#[schemars(
+    description = "The data for a commit message template. Format: '{type}({scope}): {subject}' (max 50 chars) on the first line, followed by optional bullet points (max 80 chars each) describing meaningful changes."
+)]
+pub struct CommitTemplate {
+    #[serde(rename = "type")]
+    #[schemars(
+        description = "The type of the commit message. Select from CommitType based on the change.",
+        title = "Type"
+    )]
+    pub r#type: CommitType,
+
+    #[schemars(
+        description = "A concise summary of the change (max 50 chars with type). Start with lowercase verb in present tense (e.g., 'add', 'fix', 'update'). Focus on 'what' and 'why', not 'how'.",
+        schema_with = "subject_schema"
+    )]
     pub subject: String,
+
+    #[schemars(
+        description = "Optional details as bullet points (max 80 chars each). Start each bullet with '- ' followed by present tense verb. Focus on explaining the change's purpose and impact. Include context that's not obvious from the code.",
+        schema_with = "details_schema"
+    )]
     pub details: Option<String>,
+
+    #[schemars(
+        description = "Optional issue/ticket references. Format: '#123' or 'Fixes #456' or 'Resolves #789, #101'",
+        schema_with = "issues_schema"
+    )]
     pub issues: Option<String>,
+
+    #[schemars(
+        description = "Optional breaking change description. Include this when your change breaks backward compatibility. Explain what breaks and how users should migrate.",
+        schema_with = "breaking_schema"
+    )]
     pub breaking: Option<String>,
+
+    #[schemars(
+        description = "Optional scope of the change (component affected). Use lowercase with hyphens if needed (e.g., 'auth', 'ui', 'api', 'db').",
+        schema_with = "scope_schema"
+    )]
     pub scope: Option<String>,
 }
 
-impl Default for TemplateData {
+impl Default for CommitTemplate {
     fn default() -> Self {
         Self {
-            r#type: "feat".to_string(),
+            r#type: CommitType::Feat,
             subject: "".to_string(),
             details: None,
             issues: None,
@@ -147,7 +297,7 @@ impl TemplateManager {
     pub fn render(
         &self,
         template_name: &str,
-        data: &TemplateData,
+        data: &CommitTemplate,
     ) -> Result<String, TemplateError> {
         if !self.handlebars.has_template(template_name) {
             return Err(TemplateError::NotFound(format!(
@@ -228,8 +378,8 @@ mod tests {
         let template = "{{type}}: {{subject}}\n\n{{#if details}}{{details}}{{/if}}";
         manager.register_template("test", template).unwrap();
 
-        let data = TemplateData {
-            r#type: "feat".to_string(),
+        let data = CommitTemplate {
+            r#type: CommitType::Feat,
             subject: "add new feature".to_string(),
             details: Some("- Implement cool functionality\n- Update tests".to_string()),
             ..Default::default()
@@ -253,8 +403,8 @@ mod tests {
         manager.register_template("test", template).unwrap();
 
         // With scope
-        let data_with_scope = TemplateData {
-            r#type: "feat".to_string(),
+        let data_with_scope = CommitTemplate {
+            r#type: CommitType::Feat,
             subject: "add new feature".to_string(),
             scope: Some("ui".to_string()),
             ..Default::default()
@@ -264,13 +414,19 @@ mod tests {
         assert_eq!(rendered, "feat: add new feature (ui)\n\n");
 
         // Without scope
-        let data_without_scope = TemplateData {
-            r#type: "feat".to_string(),
+        let data_without_scope = CommitTemplate {
+            r#type: CommitType::Feat,
             subject: "add new feature".to_string(),
             ..Default::default()
         };
 
         let rendered = manager.render("test", &data_without_scope).unwrap();
         assert_eq!(rendered, "feat: add new feature\n\n");
+    }
+
+    #[test]
+    fn test_instruct_macro_serialization() {
+        let schema = schemars::schema_for!(CommitTemplate);
+        println!("{}", serde_json::to_string_pretty(&schema).unwrap());
     }
 }

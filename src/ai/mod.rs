@@ -1,7 +1,7 @@
 pub mod claude;
 pub mod openai;
 
-use crate::templates::TemplateData;
+use crate::templates::CommitTemplate;
 use std::error::Error;
 use std::fmt::Debug;
 use std::sync::Arc;
@@ -21,14 +21,14 @@ pub trait AiProvider: Send + Sync + Debug {
     fn requires_api_key(&self) -> bool;
 
     /// Complete a prompt with the given model and parameters, returning structured data
-    /// This uses instructor mode to get structured data directly from the model
+    /// This uses function calling or JSON mode to get structured data directly from the model
     fn complete_structured(
         &self,
         model: &str,
         temperature: f32,
         system_prompt: &str,
         user_prompt: &str,
-    ) -> Result<TemplateData, Box<dyn Error>>;
+    ) -> Result<CommitTemplate, Box<dyn Error>>;
 
     /// Get the default model for this provider
     fn default_model(&self) -> &str;
@@ -142,7 +142,7 @@ mod tests {
     use super::*;
     use crate::config::cli::Args;
     use crate::prompts::{SYSTEM_PROMPT, USER_PROMPT_TEMPLATE};
-    use crate::templates::TemplateData;
+    use crate::templates::CommitTemplate;
 
     #[derive(Debug)]
     struct MockProvider;
@@ -166,10 +166,10 @@ mod tests {
             _temperature: f32,
             _system_prompt: &str,
             _user_prompt: &str,
-        ) -> Result<TemplateData, Box<dyn Error>> {
+        ) -> Result<CommitTemplate, Box<dyn Error>> {
             // Return a mock TemplateData
-            Ok(TemplateData {
-                r#type: "feat".to_string(),
+            Ok(CommitTemplate {
+                r#type: crate::templates::CommitType::Feat,
                 subject: "add structured completion".to_string(),
                 details: Some("- Implement structured completion\n- Add tests".to_string()),
                 issues: None,
@@ -223,7 +223,7 @@ mod tests {
         );
 
         assert!(result.is_ok());
-        assert_eq!(result.unwrap().r#type, "feat");
+        assert_eq!(result.unwrap().r#type, crate::templates::CommitType::Feat);
     }
 
     #[test]
@@ -238,12 +238,63 @@ mod tests {
 
         assert!(result.is_ok());
         let data = result.unwrap();
-        assert_eq!(data.r#type, "feat");
+        assert_eq!(data.r#type, crate::templates::CommitType::Feat);
         assert_eq!(data.subject, "add structured completion");
         assert_eq!(
             data.details,
             Some("- Implement structured completion\n- Add tests".to_string())
         );
         assert_eq!(data.scope, Some("ai".to_string()));
+    }
+
+    #[test]
+    fn test_structured_completion_with_instruct_macro() {
+        let provider = MockProvider;
+
+        // Create a JSON string that matches the TemplateData structure
+        let json_data = r#"{
+            "type": "feat",
+            "subject": "add structured completion",
+            "details": "- Implement structured completion\n- Add tests",
+            "scope": "ai",
+            "issues": null,
+            "breaking": null
+        }"#;
+
+        // Deserialize the JSON into TemplateData
+        let template_data: CommitTemplate = serde_json::from_str(json_data).unwrap();
+
+        // Verify the data is correctly parsed
+        assert_eq!(template_data.r#type, crate::templates::CommitType::Feat);
+        assert_eq!(template_data.subject, "add structured completion");
+        assert_eq!(
+            template_data.details,
+            Some("- Implement structured completion\n- Add tests".to_string())
+        );
+        assert_eq!(template_data.scope, Some("ai".to_string()));
+        assert_eq!(template_data.issues, None);
+        assert_eq!(template_data.breaking, None);
+
+        // Verify that the provider's complete_structured method returns the expected data
+        let result = provider.complete_structured(
+            "test-model",
+            0.3,
+            "test system prompt",
+            "test user prompt",
+        );
+
+        assert!(result.is_ok());
+        let data = result.unwrap();
+
+        // Serialize the data to JSON
+        let serialized = serde_json::to_string(&data).unwrap();
+
+        // Verify the serialized data contains the expected fields
+        assert!(serialized.contains("\"type\":\"feat\""));
+        assert!(serialized.contains("\"subject\":\"add structured completion\""));
+        assert!(
+            serialized.contains("\"details\":\"- Implement structured completion\\n- Add tests\"")
+        );
+        assert!(serialized.contains("\"scope\":\"ai\""));
     }
 }

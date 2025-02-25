@@ -425,8 +425,274 @@ mod tests {
     }
 
     #[test]
-    fn test_instruct_macro_serialization() {
+    fn test_commit_template_json_schema() {
+        // Generate the JSON schema for CommitTemplate
         let schema = schemars::schema_for!(CommitTemplate);
-        println!("{}", serde_json::to_string_pretty(&schema).unwrap());
+        let schema_json = serde_json::to_value(&schema).unwrap();
+        let schema_str = serde_json::to_string_pretty(&schema).unwrap();
+
+        // 1. Verify schema metadata
+        assert!(schema_str.contains("\"$schema\": \"http://json-schema.org/draft-07/schema#\""));
+        assert!(schema_str.contains("\"title\": \"CommitTemplate\""));
+        assert!(schema_str.contains("\"description\": "));
+
+        // 2. Verify required fields
+        if let Some(required) = schema_json.get("required").and_then(|r| r.as_array()) {
+            let required_fields: Vec<&str> = required.iter().filter_map(|v| v.as_str()).collect();
+
+            assert!(required_fields.contains(&"type"));
+            assert!(required_fields.contains(&"subject"));
+            assert!(required_fields.contains(&"breaking"));
+            assert!(required_fields.contains(&"details"));
+            assert!(required_fields.contains(&"issues"));
+            assert!(required_fields.contains(&"scope"));
+        } else {
+            panic!("Schema is missing required fields array");
+        }
+
+        // 3. Verify properties exist with correct titles
+        if let Some(properties) = schema_json.get("properties").and_then(|p| p.as_object()) {
+            // Check type field
+            if let Some(type_field) = properties.get("type") {
+                assert_eq!(
+                    type_field.get("title").and_then(|t| t.as_str()),
+                    Some("Type")
+                );
+                assert!(type_field.get("description").is_some());
+                assert!(type_field.get("allOf").is_some());
+            } else {
+                panic!("Schema is missing 'type' property");
+            }
+
+            // Check subject field
+            if let Some(subject_field) = properties.get("subject") {
+                assert_eq!(
+                    subject_field.get("title").and_then(|t| t.as_str()),
+                    Some("Subject")
+                );
+                assert!(subject_field.get("description").is_some());
+                assert_eq!(
+                    subject_field.get("type").and_then(|t| t.as_str()),
+                    Some("string")
+                );
+
+                // Check examples
+                if let Some(examples) = subject_field.get("examples").and_then(|e| e.as_array()) {
+                    assert!(examples.len() >= 2);
+                    assert!(examples
+                        .iter()
+                        .any(|e| e.as_str() == Some("add user login endpoint")));
+                    assert!(examples
+                        .iter()
+                        .any(|e| e.as_str() == Some("fix memory leak in image processing")));
+                } else {
+                    panic!("Subject field is missing examples");
+                }
+            } else {
+                panic!("Schema is missing 'subject' property");
+            }
+
+            // Check optional fields have correct types
+            for field in ["details", "issues", "breaking", "scope"].iter() {
+                if let Some(field_obj) = properties.get(*field) {
+                    assert!(field_obj.get("title").is_some());
+                    assert!(field_obj.get("description").is_some());
+
+                    // Check type includes null for optional fields
+                    if let Some(types) = field_obj.get("type").and_then(|t| t.as_array()) {
+                        assert!(types.contains(&serde_json::Value::String("string".to_string())));
+                        assert!(types.contains(&serde_json::Value::String("null".to_string())));
+                    } else {
+                        panic!(
+                            "Optional field '{}' doesn't have correct type definition",
+                            field
+                        );
+                    }
+
+                    // Check examples
+                    assert!(field_obj
+                        .get("examples")
+                        .and_then(|e| e.as_array())
+                        .is_some());
+                } else {
+                    panic!("Schema is missing '{}' property", field);
+                }
+            }
+        } else {
+            panic!("Schema is missing properties object");
+        }
+
+        // 4. Verify CommitType enum definition
+        if let Some(definitions) = schema_json.get("definitions").and_then(|d| d.as_object()) {
+            if let Some(commit_type) = definitions.get("CommitType") {
+                assert_eq!(
+                    commit_type.get("title").and_then(|t| t.as_str()),
+                    Some("Commit Type")
+                );
+                assert!(commit_type.get("description").is_some());
+
+                // Check oneOf array for enum values
+                if let Some(one_of) = commit_type.get("oneOf").and_then(|o| o.as_array()) {
+                    // Verify all commit types are present
+                    let types = [
+                        "feat", "fix", "refactor", "chore", "docs", "style", "test", "build", "ci",
+                        "perf",
+                    ];
+                    for commit_type in types.iter() {
+                        let found = one_of.iter().any(|item| {
+                            item.get("enum")
+                                .and_then(|e| e.as_array())
+                                .map(|arr| {
+                                    arr.contains(&serde_json::Value::String(
+                                        commit_type.to_string(),
+                                    ))
+                                })
+                                .unwrap_or(false)
+                        });
+                        assert!(found, "Commit type '{}' not found in schema", commit_type);
+                    }
+
+                    // Verify each type has a description
+                    for item in one_of {
+                        assert!(item.get("description").is_some());
+                    }
+                } else {
+                    panic!("CommitType definition is missing oneOf array");
+                }
+            } else {
+                panic!("Schema is missing CommitType definition");
+            }
+        } else {
+            panic!("Schema is missing definitions object");
+        }
+    }
+
+    #[test]
+    fn test_schema_validates_commit_template() {
+        // Create a valid CommitTemplate instance
+        let template = CommitTemplate {
+            r#type: CommitType::Feat,
+            subject: "add schema validation test".to_string(),
+            details: Some("- Test schema validation\n- Ensure examples work".to_string()),
+            issues: Some("#123".to_string()),
+            breaking: None,
+            scope: Some("schema".to_string()),
+        };
+
+        // Serialize the template to JSON
+        let template_json = serde_json::to_value(&template).unwrap();
+
+        // Get the schema
+        let schema = schemars::schema_for!(CommitTemplate);
+        let schema_json = serde_json::to_value(&schema).unwrap();
+
+        // Use a JSON Schema validator to validate the template against the schema
+        // Since we don't have a direct validator in this crate, we'll check key properties
+        // to ensure the serialized JSON matches what we expect
+
+        // Check type field
+        assert_eq!(
+            template_json.get("type").and_then(|v| v.as_str()),
+            Some("feat")
+        );
+
+        // Check subject field
+        assert_eq!(
+            template_json.get("subject").and_then(|v| v.as_str()),
+            Some("add schema validation test")
+        );
+
+        // Check details field
+        assert_eq!(
+            template_json.get("details").and_then(|v| v.as_str()),
+            Some("- Test schema validation\n- Ensure examples work")
+        );
+
+        // Check issues field
+        assert_eq!(
+            template_json.get("issues").and_then(|v| v.as_str()),
+            Some("#123")
+        );
+
+        // Check breaking field is null
+        assert!(template_json.get("breaking").unwrap().is_null());
+
+        // Check scope field
+        assert_eq!(
+            template_json.get("scope").and_then(|v| v.as_str()),
+            Some("schema")
+        );
+
+        // Verify the serialized JSON has all required fields from the schema
+        if let Some(required) = schema_json.get("required").and_then(|r| r.as_array()) {
+            for field in required {
+                if let Some(field_name) = field.as_str() {
+                    assert!(
+                        template_json.get(field_name).is_some(),
+                        "Required field '{}' is missing from serialized template",
+                        field_name
+                    );
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn test_schema_rejects_invalid_commit_template() {
+        // Test 1: Invalid commit type
+        let invalid_type_json = r#"{
+            "type": "invalid_type",
+            "subject": "this has an invalid type",
+            "details": null,
+            "issues": null,
+            "breaking": null,
+            "scope": null
+        }"#;
+
+        let result: Result<CommitTemplate, _> = serde_json::from_str(invalid_type_json);
+        assert!(result.is_err(), "Schema should reject invalid commit type");
+        let error = result.unwrap_err().to_string();
+        assert!(
+            error.contains("invalid_type"),
+            "Error should mention the invalid type"
+        );
+
+        // Test 2: Missing required field (subject)
+        let missing_subject_json = r#"{
+            "type": "feat",
+            "details": null,
+            "issues": null,
+            "breaking": null,
+            "scope": null
+        }"#;
+
+        let result: Result<CommitTemplate, _> = serde_json::from_str(missing_subject_json);
+        assert!(
+            result.is_err(),
+            "Schema should reject missing required field"
+        );
+        let error = result.unwrap_err().to_string();
+        assert!(
+            error.contains("subject") || error.contains("missing field"),
+            "Error should mention the missing field"
+        );
+
+        // Test 3: Wrong data type for a field
+        let wrong_type_json = r#"{
+            "type": "feat",
+            "subject": "valid subject",
+            "details": 12345,
+            "issues": null,
+            "breaking": null,
+            "scope": null
+        }"#;
+
+        let result: Result<CommitTemplate, _> = serde_json::from_str(wrong_type_json);
+        assert!(result.is_err(), "Schema should reject wrong data type");
+        let error = result.unwrap_err().to_string();
+        assert!(
+            error.contains("details") || error.contains("expected a string"),
+            "Error should mention the field with wrong type"
+        );
     }
 }

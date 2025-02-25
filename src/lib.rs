@@ -190,6 +190,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_provider_not_available() {
         // Temporarily unset the API keys
         let had_anthropic_key = env::var("ANTHROPIC_API_KEY").is_ok();
@@ -229,6 +230,7 @@ mod tests {
     }
 
     #[test]
+    #[serial_test::serial]
     fn test_provider_and_model_info() {
         // This test requires mocking the AI provider, so we'll use a simple approach
         // by setting up a mock environment

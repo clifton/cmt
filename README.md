@@ -106,6 +106,14 @@ Options:
           Maximum line width for diffs [default: 300]
       --template <TEMPLATE>
           Use a specific template for the commit message
+      --list-templates
+          List all available templates
+      --create-template <CREATE_TEMPLATE>
+          Create a new template
+      --template-content <TEMPLATE_CONTENT>
+          Content for the new template (used with --create-template)
+      --show-template <SHOW_TEMPLATE>
+          Show the content of a specific template
       --include-recent-commits
           Include recent commits for context
       --recent-commits-count <RECENT_COMMITS_COUNT>
@@ -140,6 +148,18 @@ cmt --provider openai --temperature 0.8
 # Provide a hint for context
 cmt --hint "This fixes the login timeout issue"
 
+# List all available templates
+cmt --list-templates
+
+# Show the content of a specific template
+cmt --show-template conventional
+
+# Create a custom template
+cmt --create-template my-template --template-content "{{type}}: {{subject}}\n\n{{details}}"
+
+# Use a specific template
+cmt --template detailed
+
 # Combine multiple options
 cmt --provider openai --model gpt-4o --hint "Update dependencies for security"
 
@@ -156,6 +176,51 @@ git commit -F <(cmt --message-only --hint "Refactor to improve performance")
    - The staged changes as the user prompt
 3. The AI generates a commit message following the conventional commit format
 4. The message is displayed (with optional diff statistics) or output directly for use with git
+
+## Template Management
+
+`cmt` supports customizable templates for formatting commit messages. Templates use the Handlebars templating language.
+
+### Available Templates
+
+By default, `cmt` comes with three built-in templates:
+- `conventional` (default): Standard conventional commit format
+- `simple`: A simplified format without the commit type
+- `detailed`: Extended format with support for breaking changes and issue references
+
+You can list all available templates with:
+```bash
+cmt --list-templates
+```
+
+### Creating Custom Templates
+
+You can create your own templates in the `~/.config/cmt/templates/` directory:
+
+```bash
+# Create a custom template
+cmt --create-template my-template --template-content "{{type}}: {{subject}}\n\n{{details}}"
+```
+
+Templates are stored as `.hbs` files and can use the following variables:
+- `{{type}}`: The commit type (feat, fix, docs, etc.)
+- `{{subject}}`: The commit subject line
+- `{{details}}`: The detailed description of changes
+- `{{scope}}`: The scope of the change (optional)
+- `{{breaking}}`: Breaking change information (optional)
+- `{{issues}}`: Related issue references (optional)
+
+### Using Templates
+
+To use a specific template:
+```bash
+cmt --template my-template
+```
+
+You can also set a default template in your `.cmt.toml` configuration file:
+```toml
+template = "my-template"
+```
 
 ## Commit Message Format
 

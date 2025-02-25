@@ -1,5 +1,6 @@
 use cmt::ai_mod::create_default_registry;
 use cmt::config_mod::{file as config_file, Config};
+use cmt::template_mod::TemplateManager;
 use cmt::{generate_commit_message, git_staged_changes, Args};
 use colored::*;
 use dotenv::dotenv;
@@ -20,6 +21,97 @@ fn main() {
             }
             Err(e) => {
                 eprintln!("{}", "Error creating configuration file:".red().bold());
+                eprintln!("{}", e);
+                process::exit(1);
+            }
+        }
+    }
+
+    // Handle listing available templates
+    if args.list_templates {
+        match TemplateManager::new() {
+            Ok(manager) => {
+                println!("{}", "Available templates:".green().bold());
+                for template in manager.list_templates() {
+                    println!("- {}", template);
+                }
+                process::exit(0);
+            }
+            Err(e) => {
+                eprintln!("{}", "Error listing templates:".red().bold());
+                eprintln!("{}", e);
+                process::exit(1);
+            }
+        }
+    }
+
+    // Handle showing template content
+    if let Some(template_name) = &args.show_template {
+        match config_file::get_template(template_name) {
+            Ok(content) => {
+                println!(
+                    "{}",
+                    format!("Template '{}':", template_name).green().bold()
+                );
+                println!("{}", content);
+                process::exit(0);
+            }
+            Err(e) => {
+                eprintln!(
+                    "{}",
+                    format!("Error showing template '{}':", template_name)
+                        .red()
+                        .bold()
+                );
+                eprintln!("{}", e);
+                process::exit(1);
+            }
+        }
+    }
+
+    // Handle creating a new template
+    if let Some(template_name) = &args.create_template {
+        // Ensure template directory exists
+        if let Err(e) = config_file::create_template_dir() {
+            eprintln!("{}", "Error creating template directory:".red().bold());
+            eprintln!("{}", e);
+            process::exit(1);
+        }
+
+        // Get template content
+        let content = match &args.template_content {
+            Some(content) => content.clone(),
+            None => {
+                eprintln!(
+                    "{}",
+                    "Error: --template-content is required when creating a template"
+                        .red()
+                        .bold()
+                );
+                eprintln!("Example: cmt --create-template my-template --template-content \"{{type}}: {{subject}}\\n\\n{{details}}\"");
+                process::exit(1);
+            }
+        };
+
+        // Save the template
+        match config_file::save_template(template_name, &content) {
+            Ok(_) => {
+                println!(
+                    "{}",
+                    format!("Template '{}' created successfully.", template_name)
+                        .green()
+                        .bold()
+                );
+                println!("You can use it with: cmt --template {}", template_name);
+                process::exit(0);
+            }
+            Err(e) => {
+                eprintln!(
+                    "{}",
+                    format!("Error creating template '{}':", template_name)
+                        .red()
+                        .bold()
+                );
                 eprintln!("{}", e);
                 process::exit(1);
             }

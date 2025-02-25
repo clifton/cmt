@@ -44,6 +44,22 @@ pub struct Args {
     #[arg(long)]
     pub template: Option<String>,
 
+    /// List all available templates
+    #[arg(long)]
+    pub list_templates: bool,
+
+    /// Create a new template
+    #[arg(long)]
+    pub create_template: Option<String>,
+
+    /// Content for the new template (used with --create-template)
+    #[arg(long)]
+    pub template_content: Option<String>,
+
+    /// Show the content of a specific template
+    #[arg(long)]
+    pub show_template: Option<String>,
+
     /// Include recent commits for context
     #[arg(long, default_value_t = true)]
     pub include_recent_commits: bool,
@@ -90,6 +106,10 @@ mod tests {
         assert!(!args.init_config);
         assert!(args.config_path.is_none());
         assert_eq!(args.provider, "claude");
+        assert!(!args.list_templates);
+        assert!(args.create_template.is_none());
+        assert!(args.template_content.is_none());
+        assert!(args.show_template.is_none());
     }
 
     #[test]
@@ -161,9 +181,10 @@ mod tests {
                 "cmt",
                 "--message-only",
                 "--no-diff-stats",
+                "--provider",
+                "openai",
                 "--model",
-                "gpt-4",
-                "--openai",
+                "gpt-4o",
                 "--temperature",
                 "0.8",
                 "--hint",
@@ -175,7 +196,7 @@ mod tests {
 
         assert!(args.message_only);
         assert!(args.no_diff_stats);
-        assert_eq!(args.model, Some("gpt-4".to_string()));
+        assert_eq!(args.model, Some("gpt-4o".to_string()));
         assert_eq!(args.temperature, Some(0.8));
         assert_eq!(args.hint, Some("Fix the login bug".to_string()));
     }
@@ -202,5 +223,41 @@ mod tests {
                 .map(ToString::to_string),
         );
         assert_eq!(args.context_lines, 10);
+    }
+
+    #[test]
+    fn test_list_templates_flag() {
+        let args = Args::new_from(["cmt", "--list-templates"].iter().map(ToString::to_string));
+        assert!(args.list_templates);
+    }
+
+    #[test]
+    fn test_create_template_option() {
+        let template_name = "custom-template";
+        let template_content = "{{type}}: {{subject}}\n\n{{details}}";
+        let args = Args::new_from(
+            [
+                "cmt",
+                "--create-template",
+                template_name,
+                "--template-content",
+                template_content,
+            ]
+            .iter()
+            .map(ToString::to_string),
+        );
+        assert_eq!(args.create_template, Some(template_name.to_string()));
+        assert_eq!(args.template_content, Some(template_content.to_string()));
+    }
+
+    #[test]
+    fn test_show_template_option() {
+        let template_name = "conventional";
+        let args = Args::new_from(
+            ["cmt", "--show-template", template_name]
+                .iter()
+                .map(ToString::to_string),
+        );
+        assert_eq!(args.show_template, Some(template_name.to_string()));
     }
 }

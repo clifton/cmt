@@ -167,26 +167,53 @@ pub fn list_templates() -> Result<Vec<String>, ConfigError> {
     Ok(templates)
 }
 
-/// Get the content of a template
-pub fn get_template(name: &str) -> Result<String, ConfigError> {
-    let template_dir = template_dir().ok_or_else(|| {
-        ConfigError::IoError(io::Error::new(
-            io::ErrorKind::NotFound,
-            "Could not determine template directory",
-        ))
-    })?;
-
-    let template_path = template_dir.join(format!("{}.hbs", name));
-
-    if !template_path.exists() {
-        return Err(ConfigError::IoError(io::Error::new(
-            io::ErrorKind::NotFound,
-            format!("Template '{}' not found", name),
-        )));
+/// Get the path to a template, prioritizing file system templates over defaults
+pub fn get_template_path(name: &str) -> Result<PathBuf, ConfigError> {
+    // First check if the template exists in the file system
+    if let Some(template_dir) = template_dir() {
+        let template_path = template_dir.join(format!("{}.hbs", name));
+        if template_path.exists() {
+            return Ok(template_path);
+        }
     }
 
-    let content = fs::read_to_string(template_path)?;
-    Ok(content)
+    // If not found in file system, check if it's a built-in template
+    match name {
+        "simple" | "conventional" | "detailed" => {
+            // For built-in templates, we don't have a real path, so we create a placeholder
+            // This indicates it's a built-in template that should be handled specially
+            Ok(PathBuf::from(format!("__builtin__/{}.hbs", name)))
+        }
+        _ => Err(ConfigError::IoError(io::Error::new(
+            io::ErrorKind::NotFound,
+            format!("Template '{}' not found", name),
+        ))),
+    }
+}
+
+/// Get the content of a template
+pub fn get_template(name: &str) -> Result<String, ConfigError> {
+    // Get the template path, which prioritizes file system templates
+    let template_path = get_template_path(name)?;
+
+    // Check if it's a built-in template
+    if let Some(path_str) = template_path.to_str() {
+        if path_str.starts_with("__builtin__/") {
+            // It's a built-in template, return the appropriate content
+            match name {
+                "simple" => return Ok(defaults::simple_template()),
+                "conventional" => return Ok(defaults::conventional_template()),
+                "detailed" => return Ok(defaults::detailed_template()),
+                _ => {} // This shouldn't happen given the logic in get_template_path
+            }
+        }
+    }
+
+    // It's a file system template, read its content
+    match fs::read_to_string(&template_path) {
+        Ok(content) => Ok(content),
+        Err(e) => Err(ConfigError::IoError(e)),
+    }
 }
 
 /// Save a template
@@ -207,4 +234,115 @@ pub fn save_template(name: &str, content: &str) -> Result<(), ConfigError> {
     fs::write(template_path, content)?;
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::env;
+    use std::fs;
+    use tempfile::TempDir;
+
+    #[test]
+    #[serial_test::serial]
+    fn test_get_template_from_file() {
+        // Create a temporary directory for testing
+        let temp_dir = TempDir::new().unwrap();
+
+        // Override the HOME environment variable to use our temp directory
+        let original_home = env::var("HOME").unwrap_or_default();
+        env::set_var("HOME", temp_dir.path());
+
+        // Create the config directory structure
+        let config_dir = temp_dir
+            .path()
+            .join(defaults::defaults::GLOBAL_CONFIG_DIRNAME);
+        let template_dir = config_dir.join("templates");
+        fs::create_dir_all(&template_dir).unwrap();
+
+        // Create a test template file with a unique name that doesn't conflict with built-ins
+        let template_name = "custom-test-template";
+        let template_content = "Test template content";
+        let template_path = template_dir.join(format!("{}.hbs", template_name));
+        fs::write(&template_path, template_content).unwrap();
+
+        // Test getting the template
+        let result = get_template(template_name);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap(), template_content);
+
+        // Restore the original HOME environment variable
+        if original_home.is_empty() {
+            env::remove_var("HOME");
+        } else {
+            env::set_var("HOME", original_home);
+        }
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn test_get_builtin_template() {
+        // Create a temporary directory for testing
+        let temp_dir = TempDir::new().unwrap();
+
+        // Override the HOME environment variable to use our temp directory
+        // This ensures we don't find any existing template files
+        let original_home = env::var("HOME").unwrap_or_default();
+        env::set_var("HOME", temp_dir.path());
+
+        // Test getting built-in templates
+        let simple_result = get_template("simple");
+        assert!(simple_result.is_ok());
+        assert_eq!(simple_result.unwrap(), defaults::simple_template());
+
+        let conventional_result = get_template("conventional");
+        assert!(conventional_result.is_ok());
+        assert_eq!(
+            conventional_result.unwrap(),
+            defaults::conventional_template()
+        );
+
+        let detailed_result = get_template("detailed");
+        assert!(detailed_result.is_ok());
+        assert_eq!(detailed_result.unwrap(), defaults::detailed_template());
+
+        // Restore the original HOME environment variable
+        if original_home.is_empty() {
+            env::remove_var("HOME");
+        } else {
+            env::set_var("HOME", original_home);
+        }
+    }
+
+    #[test]
+    #[serial_test::serial]
+    fn test_get_nonexistent_template() {
+        // Create a temporary directory for testing
+        let temp_dir = TempDir::new().unwrap();
+
+        // Override the HOME environment variable to use our temp directory
+        let original_home = env::var("HOME").unwrap_or_default();
+        env::set_var("HOME", temp_dir.path());
+
+        // Test getting a non-existent template
+        let result = get_template("nonexistent-template");
+        assert!(result.is_err());
+        let error = result.unwrap_err();
+        match error {
+            ConfigError::IoError(e) => {
+                assert_eq!(e.kind(), io::ErrorKind::NotFound);
+                assert!(e
+                    .to_string()
+                    .contains("Template 'nonexistent-template' not found"));
+            }
+            _ => panic!("Expected IoError, got {:?}", error),
+        }
+
+        // Restore the original HOME environment variable
+        if original_home.is_empty() {
+            env::remove_var("HOME");
+        } else {
+            env::set_var("HOME", original_home);
+        }
+    }
 }

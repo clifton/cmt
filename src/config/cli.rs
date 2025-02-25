@@ -20,17 +20,13 @@ pub struct Args {
     #[arg(long, default_value_t = 12)]
     pub context_lines: u32,
 
-    /// Use a specific AI model (defaults to claude-3-5-sonnet-latest or gpt-4o depending on provider)
+    /// Use a specific AI model (defaults to claude-3-7-sonnet-latest or gpt-4o depending on provider)
     #[arg(long)]
     pub model: Option<String>,
 
-    /// Use OpenAI
+    /// List available models for the selected provider
     #[arg(long)]
-    pub openai: bool,
-
-    /// Use Anthropic (default)
-    #[arg(long, default_value_t = true)]
-    pub anthropic: bool,
+    pub list_models: bool,
 
     /// Adjust the creativity of the generated message (0.0 to 2.0)
     #[arg(short, long)]
@@ -47,15 +43,51 @@ pub struct Args {
     /// Maximum line width for diffs
     #[arg(long, default_value_t = 300)]
     pub max_line_width: usize,
+
+    /// Use a specific template for the commit message
+    #[arg(long)]
+    pub template: Option<String>,
+
+    /// List all available templates
+    #[arg(long)]
+    pub list_templates: bool,
+
+    /// Create a new template
+    #[arg(long)]
+    pub create_template: Option<String>,
+
+    /// Content for the new template (used with --create-template)
+    #[arg(long)]
+    pub template_content: Option<String>,
+
+    /// Show the content of a specific template
+    #[arg(long)]
+    pub show_template: Option<String>,
+
+    /// Include recent commits for context
+    #[arg(long, default_value_t = true)]
+    pub include_recent_commits: bool,
+
+    /// Number of recent commits to include for context
+    #[arg(long, default_value_t = 5)]
+    pub recent_commits_count: usize,
+
+    /// Create a new configuration file
+    #[arg(long)]
+    pub init_config: bool,
+
+    /// Path to save the configuration file (defaults to .cmt.toml in current directory)
+    #[arg(long)]
+    pub config_path: Option<String>,
+
+    /// Use a specific provider (claude, openai, etc.)
+    #[arg(long, default_value = "claude")]
+    pub provider: String,
 }
 
 impl Args {
     pub fn new_from(args: impl Iterator<Item = String>) -> Self {
-        let mut parsed = Self::parse_from(args);
-        if parsed.openai {
-            parsed.anthropic = false;
-        }
-        parsed
+        Self::parse_from(args)
     }
 }
 
@@ -71,10 +103,18 @@ mod tests {
         assert!(!args.show_raw_diff);
         assert_eq!(args.context_lines, 12);
         assert!(args.model.is_none());
-        assert!(!args.openai);
-        assert!(args.anthropic);
         assert!(args.temperature.is_none());
         assert!(args.hint.is_none());
+        assert!(args.include_recent_commits);
+        assert_eq!(args.recent_commits_count, 5);
+        assert!(!args.init_config);
+        assert!(args.config_path.is_none());
+        assert_eq!(args.provider, "claude");
+        assert!(!args.list_templates);
+        assert!(!args.list_models);
+        assert!(args.create_template.is_none());
+        assert!(args.template_content.is_none());
+        assert!(args.show_template.is_none());
     }
 
     #[test]
@@ -84,6 +124,21 @@ mod tests {
 
         let args = Args::new_from(["cmt", "-m"].iter().map(ToString::to_string));
         assert!(args.message_only);
+    }
+
+    #[test]
+    fn test_provider_option() {
+        // Explicit provider should be used
+        let args = Args::new_from(
+            ["cmt", "--provider", "openai"]
+                .iter()
+                .map(ToString::to_string),
+        );
+        assert_eq!(args.provider, "openai");
+
+        // Default should be claude
+        let args = Args::new_from(["cmt"].iter().map(ToString::to_string));
+        assert_eq!(args.provider, "claude");
     }
 
     #[test]
@@ -97,19 +152,6 @@ mod tests {
         let model = "gpt-4";
         let args = Args::new_from(["cmt", "--model", model].iter().map(ToString::to_string));
         assert_eq!(args.model, Some(model.to_string()));
-    }
-
-    #[test]
-    fn test_provider_flags() {
-        // Default is Anthropic
-        let args = Args::new_from(["cmt"].iter().map(ToString::to_string));
-        assert!(args.anthropic);
-        assert!(!args.openai);
-
-        // Switch to OpenAI
-        let args = Args::new_from(["cmt", "--openai"].iter().map(ToString::to_string));
-        assert!(!args.anthropic);
-        assert!(args.openai);
     }
 
     #[test]
@@ -144,9 +186,10 @@ mod tests {
                 "cmt",
                 "--message-only",
                 "--no-diff-stats",
+                "--provider",
+                "openai",
                 "--model",
-                "gpt-4",
-                "--openai",
+                "gpt-4o",
                 "--temperature",
                 "0.8",
                 "--hint",
@@ -158,9 +201,7 @@ mod tests {
 
         assert!(args.message_only);
         assert!(args.no_diff_stats);
-        assert_eq!(args.model, Some("gpt-4".to_string()));
-        assert!(args.openai);
-        assert!(!args.anthropic);
+        assert_eq!(args.model, Some("gpt-4o".to_string()));
         assert_eq!(args.temperature, Some(0.8));
         assert_eq!(args.hint, Some("Fix the login bug".to_string()));
     }
@@ -187,5 +228,47 @@ mod tests {
                 .map(ToString::to_string),
         );
         assert_eq!(args.context_lines, 10);
+    }
+
+    #[test]
+    fn test_list_templates_flag() {
+        let args = Args::new_from(["cmt", "--list-templates"].iter().map(ToString::to_string));
+        assert!(args.list_templates);
+    }
+
+    #[test]
+    fn test_create_template_option() {
+        let template_name = "custom-template";
+        let template_content = "{{type}}: {{subject}}\n\n{{details}}";
+        let args = Args::new_from(
+            [
+                "cmt",
+                "--create-template",
+                template_name,
+                "--template-content",
+                template_content,
+            ]
+            .iter()
+            .map(ToString::to_string),
+        );
+        assert_eq!(args.create_template, Some(template_name.to_string()));
+        assert_eq!(args.template_content, Some(template_content.to_string()));
+    }
+
+    #[test]
+    fn test_show_template_option() {
+        let template_name = "conventional";
+        let args = Args::new_from(
+            ["cmt", "--show-template", template_name]
+                .iter()
+                .map(ToString::to_string),
+        );
+        assert_eq!(args.show_template, Some(template_name.to_string()));
+    }
+
+    #[test]
+    fn test_list_models_flag() {
+        let args = Args::new_from(["cmt", "--list-models"].iter().map(ToString::to_string));
+        assert!(args.list_models);
     }
 }

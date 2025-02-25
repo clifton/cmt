@@ -5,8 +5,8 @@
 ## Features
 
 - 🤖 Supports multiple AI models:
-  - Anthropic's Claude 3.5 Sonnet (default, temperature 0.3)
-  - OpenAI's GPT-4 Optimized (temperature 1.0)
+  - Anthropic's Claude Sonnet 3.7 (default)
+  - OpenAI's GPT-4o
 - 📝 Follows conventional commit format (`type: subject`)
 - 💡 Contextual hints to guide message generation
 
@@ -72,7 +72,7 @@ git add .
 cmt
 
 # Generate a commit message using OpenAI
-cmt --openai
+cmt --provider openai
 
 # Use the generated message directly with git
 git commit -F <(cmt --message-only)
@@ -81,6 +81,8 @@ git commit -F <(cmt --message-only)
 ### Command-line Options
 
 ```
+CLI tool that generates commit messages using AI
+
 Usage: cmt [OPTIONS]
 
 Options:
@@ -93,11 +95,7 @@ Options:
       --context-lines <CONTEXT_LINES>
           Number of context lines to show in the git diff [default: 12]
       --model <MODEL>
-          Use a specific AI model (defaults to claude-3-5-sonnet-latest or gpt-4o depending on provider)
-      --openai
-          Use OpenAI
-      --anthropic
-          Use Anthropic (default)
+          Use a specific AI model (defaults to claude-3-7-sonnet-latest or gpt-4o depending on provider)
   -t, --temperature <TEMPERATURE>
           Adjust the creativity of the generated message (0.0 to 2.0)
       --hint <HINT>
@@ -106,6 +104,28 @@ Options:
           Number of maximum lines to show per file in the git diff [default: 500]
       --max-line-width <MAX_LINE_WIDTH>
           Maximum line width for diffs [default: 300]
+      --template <TEMPLATE>
+          Use a specific template for the commit message
+      --list-templates
+          List all available templates
+      --list-models
+          List all available models for the selected provider
+      --create-template <CREATE_TEMPLATE>
+          Create a new template
+      --template-content <TEMPLATE_CONTENT>
+          Content for the new template (used with --create-template)
+      --show-template <SHOW_TEMPLATE>
+          Show the content of a specific template
+      --include-recent-commits
+          Include recent commits for context
+      --recent-commits-count <RECENT_COMMITS_COUNT>
+          Number of recent commits to include for context [default: 5]
+      --init-config
+          Create a new configuration file
+      --config-path <CONFIG_PATH>
+          Path to save the configuration file (defaults to .cmt.toml in current directory)
+      --provider <PROVIDER>
+          Use a specific provider (claude, openai, etc.) [default: claude]
   -h, --help
           Print help
   -V, --version
@@ -125,13 +145,31 @@ cmt --show-raw-diff
 cmt --no-diff-stats
 
 # Use OpenAI with a custom temperature
-cmt --openai --temperature 0.8
+cmt --provider openai --temperature 0.8
 
 # Provide a hint for context
 cmt --hint "This fixes the login timeout issue"
 
+# List all available templates
+cmt --list-templates
+
+# List all available models for the current provider
+cmt --list-models
+
+# List all available models for a specific provider
+cmt --provider openai --list-models
+
+# Show the content of a specific template
+cmt --show-template conventional
+
+# Create a custom template
+cmt --create-template my-template --template-content "{{type}}: {{subject}}\n\n{{details}}"
+
+# Use a specific template
+cmt --template detailed
+
 # Combine multiple options
-cmt --openai --model gpt-4 --hint "Update dependencies for security"
+cmt --provider openai --model gpt-4o --hint "Update dependencies for security"
 
 # Use with git commit directly
 git commit -F <(cmt --message-only --hint "Refactor to improve performance")
@@ -146,6 +184,53 @@ git commit -F <(cmt --message-only --hint "Refactor to improve performance")
    - The staged changes as the user prompt
 3. The AI generates a commit message following the conventional commit format
 4. The message is displayed (with optional diff statistics) or output directly for use with git
+
+You can view available models for each provider using the `--list-models` flag, which dynamically fetches the latest available models from the provider's API.
+
+## Template Management
+
+`cmt` supports customizable templates for formatting commit messages. Templates use the Handlebars templating language.
+
+### Available Templates
+
+By default, `cmt` comes with three built-in templates:
+- `conventional` (default): Standard conventional commit format
+- `simple`: A simplified format without the commit type
+- `detailed`: Extended format with support for breaking changes and issue references
+
+You can list all available templates with:
+```bash
+cmt --list-templates
+```
+
+### Creating Custom Templates
+
+You can create your own templates in the `~/.config/cmt/templates/` directory:
+
+```bash
+# Create a custom template
+cmt --create-template my-template --template-content "{{type}}: {{subject}}\n\n{{details}}"
+```
+
+Templates are stored as `.hbs` files and can use the following variables:
+- `{{type}}`: The commit type (feat, fix, docs, etc.)
+- `{{subject}}`: The commit subject line
+- `{{details}}`: The detailed description of changes
+- `{{scope}}`: The scope of the change (optional)
+- `{{breaking}}`: Breaking change information (optional)
+- `{{issues}}`: Related issue references (optional)
+
+### Using Templates
+
+To use a specific template:
+```bash
+cmt --template my-template
+```
+
+You can also set a default template in your `.cmt.toml` configuration file:
+```toml
+template = "my-template"
+```
 
 ## Commit Message Format
 

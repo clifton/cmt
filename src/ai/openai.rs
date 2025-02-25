@@ -66,7 +66,7 @@ impl AiProvider for OpenAiProvider {
             }))
             .send()
             .map_err(|e| {
-                if e.is_timeout() {
+                let error_msg = if e.is_timeout() {
                     format!("Request timed out: {}", e)
                 } else if e.is_connect() {
                     format!(
@@ -77,7 +77,8 @@ impl AiProvider for OpenAiProvider {
                     format!("API error (status {}): {}", status, e)
                 } else {
                     format!("Unknown error: {}", e)
-                }
+                };
+                Box::new(AiError::ApiError(error_msg))
             })?;
 
         let status = response.status();
@@ -85,12 +86,28 @@ impl AiProvider for OpenAiProvider {
             let error_text = response
                 .text()
                 .unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(format!("API error (status {}): {}", status, error_text).into());
+
+            // Check if this is a model-related error
+            if error_text.contains("model")
+                && (status.as_u16() == 404
+                    || error_text.contains("does not exist")
+                    || error_text.contains("not found"))
+            {
+                return Err(Box::new(AiError::InvalidModel(format!(
+                    "The model `{}` does not exist or you do not have access to it.",
+                    model
+                ))));
+            }
+
+            return Err(Box::new(AiError::ApiError(format!(
+                "API error (status {}): {}",
+                status, error_text
+            ))));
         }
 
         let json: Value = response
             .json()
-            .map_err(|e| format!("Failed to parse JSON: {}", e))?;
+            .map_err(|e| Box::new(AiError::ApiError(format!("Failed to parse JSON: {}", e))))?;
 
         if let Some(content) = json
             .get("choices")
@@ -102,7 +119,9 @@ impl AiProvider for OpenAiProvider {
         {
             Ok(content.trim().to_string())
         } else {
-            Err("Failed to extract content from response".into())
+            Err(Box::new(AiError::ApiError(
+                "Failed to extract content from response".to_string(),
+            )))
         }
     }
 
@@ -127,19 +146,22 @@ impl AiProvider for OpenAiProvider {
             .header("Authorization", format!("Bearer {}", api_key))
             .header("Content-Type", "application/json")
             .send()
-            .map_err(|e| format!("Failed to fetch models: {}", e))?;
+            .map_err(|e| Box::new(AiError::ApiError(format!("Failed to fetch models: {}", e))))?;
 
         let status = response.status();
         if !status.is_success() {
             let error_text = response
                 .text()
                 .unwrap_or_else(|_| "Unknown error".to_string());
-            return Err(format!("API error (status {}): {}", status, error_text).into());
+            return Err(Box::new(AiError::ApiError(format!(
+                "API error (status {}): {}",
+                status, error_text
+            ))));
         }
 
         let json: Value = response
             .json()
-            .map_err(|e| format!("Failed to parse JSON: {}", e))?;
+            .map_err(|e| Box::new(AiError::ApiError(format!("Failed to parse JSON: {}", e))))?;
 
         let models = json
             .get("data")

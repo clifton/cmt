@@ -45,6 +45,64 @@ fn main() {
         }
     }
 
+    // Handle listing available models
+    if args.list_models {
+        let registry = create_default_registry();
+        let provider_name = &args.provider;
+
+        match registry.get(provider_name) {
+            Some(provider) => {
+                match provider.fetch_available_models() {
+                    Ok(models) => {
+                        println!(
+                            "{}",
+                            format!("Available models for {}:", provider_name)
+                                .green()
+                                .bold(),
+                        );
+
+                        // Sort models alphabetically for better readability
+                        let mut sorted_models = models.clone();
+                        sorted_models.sort();
+
+                        for model in sorted_models {
+                            // Highlight the default model
+                            if model == provider.default_model() {
+                                println!("- {} (default)", model.cyan());
+                            } else {
+                                println!("- {}", model);
+                            }
+                        }
+                        process::exit(0);
+                    }
+                    Err(e) => {
+                        eprintln!(
+                            "{}",
+                            format!("Error fetching models for {}:", provider_name)
+                                .red()
+                                .bold()
+                        );
+                        eprintln!("{}", e);
+                        process::exit(1);
+                    }
+                }
+            }
+            None => {
+                eprintln!(
+                    "{}",
+                    format!("Provider '{}' not found", provider_name)
+                        .red()
+                        .bold()
+                );
+                eprintln!(
+                    "Available providers: {}",
+                    registry.provider_names().join(", ")
+                );
+                process::exit(1);
+            }
+        }
+    }
+
     // Handle showing template content
     if let Some(template_name) = &args.show_template {
         match config_file::get_template(template_name) {

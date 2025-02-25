@@ -108,6 +108,8 @@ Options:
           Use a specific template for the commit message
       --list-templates
           List all available templates
+      --list-models
+          List all available models for the selected provider
       --create-template <CREATE_TEMPLATE>
           Create a new template
       --template-content <TEMPLATE_CONTENT>
@@ -151,6 +153,12 @@ cmt --hint "This fixes the login timeout issue"
 # List all available templates
 cmt --list-templates
 
+# List all available models for the current provider
+cmt --list-models
+
+# List all available models for a specific provider
+cmt --provider openai --list-models
+
 # Show the content of a specific template
 cmt --show-template conventional
 
@@ -176,6 +184,8 @@ git commit -F <(cmt --message-only --hint "Refactor to improve performance")
    - The staged changes as the user prompt
 3. The AI generates a commit message following the conventional commit format
 4. The message is displayed (with optional diff statistics) or output directly for use with git
+
+You can view available models for each provider using the `--list-models` flag, which dynamically fetches the latest available models from the provider's API.
 
 ## Template Management
 

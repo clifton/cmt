@@ -24,6 +24,10 @@ pub struct Args {
     #[arg(long)]
     pub model: Option<String>,
 
+    /// List available models for the selected provider
+    #[arg(long)]
+    pub list_models: bool,
+
     /// Adjust the creativity of the generated message (0.0 to 2.0)
     #[arg(short, long)]
     pub temperature: Option<f32>,
@@ -107,6 +111,7 @@ mod tests {
         assert!(args.config_path.is_none());
         assert_eq!(args.provider, "claude");
         assert!(!args.list_templates);
+        assert!(!args.list_models);
         assert!(args.create_template.is_none());
         assert!(args.template_content.is_none());
         assert!(args.show_template.is_none());
@@ -259,5 +264,11 @@ mod tests {
                 .map(ToString::to_string),
         );
         assert_eq!(args.show_template, Some(template_name.to_string()));
+    }
+
+    #[test]
+    fn test_list_models_flag() {
+        let args = Args::new_from(["cmt", "--list-models"].iter().map(ToString::to_string));
+        assert!(args.list_models);
     }
 }

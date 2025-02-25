@@ -128,16 +128,54 @@ impl AiProvider for ClaudeProvider {
     }
 
     fn fetch_available_models(&self) -> Result<Vec<String>, Box<dyn Error>> {
-        // Anthropic doesn't have a public models endpoint yet, so we'll return a curated list
-        // This could be updated in the future when Anthropic adds a models endpoint
-        Ok(vec![
-            "claude-3-5-sonnet-20240620".to_string(),
-            "claude-3-opus-20240229".to_string(),
-            "claude-3-sonnet-20240229".to_string(),
-            "claude-3-haiku-20240307".to_string(),
-            "claude-2.1".to_string(),
-            "claude-2.0".to_string(),
-        ])
+        // Use the Anthropic API to fetch available models
+        let api_key = Self::get_api_key()?;
+        let client = Client::new();
+
+        let response = client
+            .get(format!("{}/v1/models", Self::api_base_url()))
+            .header("x-api-key", api_key)
+            .header("anthropic-version", "2023-06-01")
+            .header("content-type", "application/json")
+            .send()
+            .map_err(|e| format!("Failed to fetch models: {}", e))?;
+
+        let status = response.status();
+        if !status.is_success() {
+            let error_text = response
+                .text()
+                .unwrap_or_else(|_| "Unknown error".to_string());
+            return Err(format!("API error (status {}): {}", status, error_text).into());
+        }
+
+        let json: Value = response
+            .json()
+            .map_err(|e| format!("Failed to parse JSON: {}", e))?;
+
+        // Extract model IDs from the response
+        let mut models = json
+            .get("data")
+            .and_then(|data| data.as_array())
+            .map(|models_array| {
+                models_array
+                    .iter()
+                    .filter_map(|model| model.get("id").and_then(|id| id.as_str()))
+                    .map(|id| id.to_string())
+                    .collect::<Vec<String>>()
+            })
+            .unwrap_or_default();
+
+        // If we couldn't get any models, return a fallback list
+        if models.is_empty() {
+            return Err("Failed to fetch available models from the API".into());
+        }
+
+        // models ending in -latest do not show up in the API response
+        if !models.contains(&self.default_model().to_string()) {
+            models.push(self.default_model().to_string());
+        }
+
+        Ok(models)
     }
 }
 
@@ -259,6 +297,80 @@ mod tests {
 
     #[test]
     #[serial]
+    fn test_fetch_available_models() {
+        let mut server = setup();
+
+        // Mock the models endpoint
+        let models_mock = server
+            .mock("GET", "/v1/models")
+            .match_header("x-api-key", "test-api-key")
+            .match_header("anthropic-version", "2023-06-01")
+            .with_status(200)
+            .with_body(
+                r#"{
+                "data": [
+                    {"id": "claude-3-5-sonnet-20241022", "object": "model"},
+                    {"id": "claude-3-opus-20240229", "object": "model"},
+                    {"id": "claude-3-sonnet-20240229", "object": "model"},
+                    {"id": "claude-3-haiku-20240307", "object": "model"},
+                    {"id": "claude-3-5-sonnet-20240620", "object": "model"}
+                ]
+            }"#,
+            )
+            .create();
+
+        let provider = ClaudeProvider::new();
+        let models = provider.fetch_available_models().unwrap();
+
+        // Verify we got the expected models plus potentially the default model
+        // The default model might be added if it's not in the list
+        assert!(models.len() == 6);
+        assert!(models.contains(&"claude-3-5-sonnet-20241022".to_string()));
+        assert!(models.contains(&"claude-3-opus-20240229".to_string()));
+        assert!(models.contains(&"claude-3-sonnet-20240229".to_string()));
+        assert!(models.contains(&"claude-3-haiku-20240307".to_string()));
+        assert!(models.contains(&"claude-3-5-sonnet-20240620".to_string()));
+        // The default model should also be in the list
+        assert!(models.contains(&provider.default_model().to_string()));
+
+        models_mock.assert();
+    }
+
+    #[test]
+    #[serial]
+    fn test_fetch_available_models_fallback() {
+        let mut server = setup();
+
+        // Mock the models endpoint to return an error
+        let models_mock = server
+            .mock("GET", "/v1/models")
+            .match_header("x-api-key", "test-api-key")
+            .match_header("anthropic-version", "2023-06-01")
+            .with_status(500)
+            .with_body(
+                r#"{
+                "error": {
+                    "message": "Internal server error"
+                }
+            }"#,
+            )
+            .create();
+
+        let provider = ClaudeProvider::new();
+
+        // The method should return an error
+        let result = provider.fetch_available_models();
+        assert!(result.is_err());
+
+        // Verify the error message
+        let error = result.unwrap_err().to_string();
+        assert!(error.contains("500"));
+
+        models_mock.assert();
+    }
+
+    #[test]
+    #[serial]
     fn test_invalid_model_error() {
         let mut server = setup();
         let mock = server
@@ -272,6 +384,24 @@ mod tests {
                     "type": "not_found_error",
                     "message": "model: invalid-model-name"
                 }
+            }"#,
+            )
+            .create();
+
+        // Mock the models endpoint
+        let models_mock = server
+            .mock("GET", "/v1/models")
+            .match_header("x-api-key", "test-api-key")
+            .match_header("anthropic-version", "2023-06-01")
+            .with_status(200)
+            .with_body(
+                r#"{
+                "data": [
+                    {"id": "claude-3-5-sonnet-20241022", "object": "model"},
+                    {"id": "claude-3-opus-20240229", "object": "model"},
+                    {"id": "claude-3-sonnet-20240229", "object": "model"},
+                    {"id": "claude-3-haiku-20240307", "object": "model"}
+                ]
             }"#,
             )
             .create();
@@ -295,9 +425,10 @@ mod tests {
         // Test that fetch_available_models returns the expected models
         let models = provider.fetch_available_models().unwrap();
         assert!(!models.is_empty());
-        assert!(models.contains(&"claude-3-5-sonnet-20240620".to_string()));
+        assert!(models.contains(&"claude-3-5-sonnet-20241022".to_string()));
         assert!(models.contains(&"claude-3-opus-20240229".to_string()));
 
         mock.assert();
+        models_mock.assert();
     }
 }

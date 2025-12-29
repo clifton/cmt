@@ -89,6 +89,7 @@ impl AiProvider for OpenAiProvider {
                     }
                 ],
                 "temperature": temperature,
+                "max_completion_tokens": crate::ai::DEFAULT_MAX_TOKENS,
                 "tools": [
                     {
                         "type": "function",
@@ -120,9 +121,35 @@ impl AiProvider for OpenAiProvider {
                 }));
             }
 
+            // Provide clearer error messages for common HTTP errors
+            let error_msg = match status.as_u16() {
+                520..=524 => {
+                    format!(
+                        "Cloudflare/API gateway error (status {}): {}. This is usually transient - please try again.",
+                        status.as_u16(),
+                        error_text
+                    )
+                }
+                429 => {
+                    format!(
+                        "Rate limit exceeded (status {}): {}. Please wait a moment and try again.",
+                        status.as_u16(),
+                        error_text
+                    )
+                }
+                503 => {
+                    format!(
+                        "Service unavailable (status {}): {}. The API may be temporarily down - please try again.",
+                        status.as_u16(),
+                        error_text
+                    )
+                }
+                _ => format!("API error (status {}): {}", status.as_u16(), error_text),
+            };
+
             return Err(Box::new(AiError::ApiError {
                 code: status.as_u16(),
-                message: format!("API error (status {}): {}", status, error_text),
+                message: error_msg,
             }));
         }
 
@@ -157,7 +184,7 @@ impl AiProvider for OpenAiProvider {
     }
 
     fn default_temperature(&self) -> f32 {
-        crate::ai::OPENAI_DEFAULT_TEMP
+        crate::ai::DEFAULT_TEMPERATURE
     }
 
     fn check_available(&self) -> Result<(), Box<dyn Error>> {

@@ -2,7 +2,7 @@ use arboard::Clipboard;
 use cmt::ai_mod::create_default_registry;
 use cmt::config_mod::{file as config_file, Config};
 use cmt::template_mod::TemplateManager;
-use cmt::{analyze_diff, generate_commit_message, git_staged_changes, Args, Spinner};
+use cmt::{analyze_diff, generate_commit_message, Args, Spinner};
 use colored::*;
 use dotenv::dotenv;
 use git2::Repository;
@@ -211,8 +211,8 @@ fn main() {
         }
     };
 
-    // Get staged changes
-    let staged_changes = match cmt::get_staged_changes(
+    // Get staged changes (includes both diff text and stats in one pass)
+    let staged = match cmt::get_staged_changes(
         &repo,
         args.context_lines,
         args.max_lines_per_file,
@@ -225,10 +225,35 @@ fn main() {
             process::exit(1);
         }
     };
+    let staged_changes = staged.diff_text.clone();
 
-    // Get recent commits if enabled
-    let recent_commits = if args.include_recent_commits {
-        match cmt::get_recent_commits(&repo, args.recent_commits_count) {
+    // Determine diff size for adaptive behaviors
+    let is_large_diff = staged.stats.files_changed > 40
+        || (staged.stats.insertions + staged.stats.deletions) > 4000;
+
+    // Get recent commits if enabled (adaptive gating and count capping on large diffs)
+    let include_recent = args.include_recent_commits && !is_large_diff;
+    let effective_recent_count = if include_recent {
+        if staged.stats.files_changed > 25
+            || (staged.stats.insertions + staged.stats.deletions) > 2000
+        {
+            args.recent_commits_count.min(3)
+        } else {
+            args.recent_commits_count
+        }
+    } else {
+        0
+    };
+
+    if args.include_recent_commits && !include_recent {
+        eprintln!(
+            "{}",
+            "Skipping recent commits for this large diff to reduce prompt size.".yellow()
+        );
+    }
+
+    let recent_commits = if include_recent {
+        match cmt::get_recent_commits(&repo, effective_recent_count) {
             Ok(commits) => commits,
             Err(e) => {
                 eprintln!(
@@ -264,9 +289,24 @@ fn main() {
         println!();
     }
 
+    // Get provider and model info for display
+    let registry = create_default_registry();
+    let model_name = args
+        .model
+        .clone()
+        .unwrap_or_else(|| registry.default_model_for(&args.provider));
+
+    // Show diff stats before sending to LLM (unless message-only mode)
+    if !args.message_only && !args.no_diff_stats {
+        staged.stats.print();
+    }
+
     // Generate commit message with spinner (only in interactive mode)
     let spinner = if !args.message_only {
-        Some(Spinner::new("Generating commit message..."))
+        Some(Spinner::new(&format!(
+            "Generating commit message with {}...",
+            model_name
+        )))
     } else {
         None
     };
@@ -320,40 +360,6 @@ fn main() {
         // Output just the message for piping to git commit
         print!("{}", commit_message);
     } else {
-        // Show diff stats if not disabled
-        if !args.no_diff_stats {
-            match git_staged_changes(&repo) {
-                Ok(_) => {
-                    // The function already prints the stats, no need to print again
-                    println!(); // Add an extra newline for spacing
-                }
-                Err(e) => {
-                    eprintln!(
-                        "{}",
-                        "Warning: Failed to show diff statistics:".yellow().bold()
-                    );
-                    eprintln!("{}", e);
-                }
-            }
-        }
-
-        // Create registry to get default model
-        let registry = create_default_registry();
-        let default_model = registry.default_model_for(&args.provider);
-
-        // Show which provider and model is being used
-        println!(
-            "{}",
-            format!(
-                "Using {} {}",
-                args.provider,
-                args.model.as_deref().unwrap_or(&default_model)
-            )
-            .cyan()
-            .italic()
-        );
-        println!();
-
         // Show the generated commit message
         println!("{}", "Commit message:".green().bold());
         println!("{}", commit_message);
@@ -368,7 +374,6 @@ fn main() {
                     CommitAction::Commit
                 } else {
                     // Prompt for action
-                    println!();
                     print!(
                         "{}",
                         "[y]es to commit, [n]o to cancel, [h]int to regenerate: ".cyan()
@@ -425,7 +430,8 @@ fn main() {
                                 current_args.hint = Some(hint.to_string());
 
                                 // Regenerate with spinner
-                                let spinner = Spinner::new("Regenerating commit message...");
+                                let spinner =
+                                    Spinner::new(&format!("Regenerating with {}...", model_name));
                                 match generate_commit_message(
                                     &current_args,
                                     &staged_changes,

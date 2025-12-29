@@ -75,7 +75,7 @@ impl AiProvider for ClaudeProvider {
             .header("content-type", "application/json")
             .json(&json!({
                 "model": model,
-                "max_tokens": 1024,
+                "max_tokens": crate::ai::DEFAULT_MAX_TOKENS,
                 "temperature": temperature,
                 "system": json_system_prompt,
                 "messages": [{
@@ -101,9 +101,35 @@ impl AiProvider for ClaudeProvider {
                 }));
             }
 
+            // Provide clearer error messages for common HTTP errors
+            let error_msg = match status.as_u16() {
+                520..=524 => {
+                    format!(
+                        "Cloudflare/API gateway error (status {}): {}. This is usually transient - please try again.",
+                        status.as_u16(),
+                        error_text
+                    )
+                }
+                429 => {
+                    format!(
+                        "Rate limit exceeded (status {}): {}. Please wait a moment and try again.",
+                        status.as_u16(),
+                        error_text
+                    )
+                }
+                503 => {
+                    format!(
+                        "Service unavailable (status {}): {}. The API may be temporarily down - please try again.",
+                        status.as_u16(),
+                        error_text
+                    )
+                }
+                _ => format!("API error (status {}): {}", status.as_u16(), error_text),
+            };
+
             return Err(Box::new(AiError::ApiError {
                 code: status.as_u16(),
-                message: format!("API error (status {}): {}", status, error_text),
+                message: error_msg,
             }));
         }
 
@@ -136,7 +162,7 @@ impl AiProvider for ClaudeProvider {
     }
 
     fn default_temperature(&self) -> f32 {
-        crate::ai::CLAUDE_DEFAULT_TEMP
+        crate::ai::DEFAULT_TEMPERATURE
     }
 
     fn check_available(&self) -> Result<(), Box<dyn Error>> {

@@ -153,9 +153,9 @@ git add test.txt
 # Capture the full output to verify both diff stats and file name
 output=$("$CMT_BIN")
 
-# Check for "Diff Statistics:" header
-if ! echo "$output" | grep -q "Diff Statistics:"; then
-    echo "❌ Failed: Missing 'Diff Statistics:' header in output"
+# Check for "Staged:" header (new format)
+if ! echo "$output" | grep -q "Staged:"; then
+    echo "❌ Failed: Missing 'Staged:' header in output"
     echo "Output was:"
     echo "$output"
     exit 1
@@ -169,8 +169,8 @@ if ! echo "$output" | grep -q "test.txt"; then
     exit 1
 fi
 
-# Check for file change indicators
-if ! echo "$output" | grep -q "file.*changed"; then
+# Check for file change indicators (new format: "Staged: X file(s)")
+if ! echo "$output" | grep -qE "Staged:.*file"; then
     echo "❌ Failed: Missing file change statistics"
     echo "Output was:"
     echo "$output"

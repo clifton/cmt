@@ -1,5 +1,7 @@
 use crate::ai::http::{handle_request_error, parse_json_response};
-use crate::ai::{parse_commit_template_json, AiError, AiProvider, GEMINI_DEFAULT_TEMP};
+use crate::ai::{
+    parse_commit_template_json, AiError, AiProvider, DEFAULT_MAX_TOKENS, DEFAULT_TEMPERATURE,
+};
 use crate::templates::CommitTemplate;
 use reqwest::blocking::Client;
 use serde_json::{json, Value};
@@ -91,7 +93,7 @@ impl AiProvider for GeminiProvider {
                 }],
                 "generationConfig": {
                     "temperature": temperature,
-                    "maxOutputTokens": 2048,
+                    "maxOutputTokens": DEFAULT_MAX_TOKENS,
                     "responseMimeType": "application/json"
                 }
             }))
@@ -115,9 +117,35 @@ impl AiProvider for GeminiProvider {
                 }));
             }
 
+            // Provide clearer error messages for common HTTP errors
+            let error_msg = match status.as_u16() {
+                520..=524 => {
+                    format!(
+                        "Cloudflare/API gateway error (status {}): {}. This is usually transient - please try again.",
+                        status.as_u16(),
+                        error_text
+                    )
+                }
+                429 => {
+                    format!(
+                        "Rate limit exceeded (status {}): {}. Please wait a moment and try again.",
+                        status.as_u16(),
+                        error_text
+                    )
+                }
+                503 => {
+                    format!(
+                        "Service unavailable (status {}): {}. The API may be temporarily down - please try again.",
+                        status.as_u16(),
+                        error_text
+                    )
+                }
+                _ => format!("API error (status {}): {}", status.as_u16(), error_text),
+            };
+
             return Err(Box::new(AiError::ApiError {
                 code: status.as_u16(),
-                message: format!("API error (status {}): {}", status, error_text),
+                message: error_msg,
             }));
         }
 
@@ -151,7 +179,7 @@ impl AiProvider for GeminiProvider {
     }
 
     fn default_temperature(&self) -> f32 {
-        GEMINI_DEFAULT_TEMP
+        DEFAULT_TEMPERATURE
     }
 
     fn check_available(&self) -> Result<(), Box<dyn Error>> {

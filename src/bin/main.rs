@@ -1,12 +1,14 @@
 use arboard::Clipboard;
 use cmt::ai_mod::create_default_registry;
 use cmt::config_mod::{file as config_file, Config};
+use cmt::pricing::{self, PricingCache};
 use cmt::template_mod::TemplateManager;
 use cmt::{analyze_diff, generate_commit_message, Args, Spinner};
 use colored::*;
 use dotenv::dotenv;
 use git2::Repository;
 use std::io::{self, Write};
+use std::time::Instant;
 use std::{env, process};
 
 enum CommitAction {
@@ -18,6 +20,9 @@ enum CommitAction {
 fn main() {
     dotenv().ok(); // Load .env file if it exists
     let args = Args::new_from(env::args());
+
+    // Start pricing fetch in background (will be ready by time generation completes)
+    let mut pricing_cache = PricingCache::new();
 
     // Handle configuration initialization
     if args.init_config {
@@ -311,6 +316,7 @@ fn main() {
         None
     };
 
+    let start_time = Instant::now();
     let commit_message =
         match generate_commit_message(&args, &staged_changes, &recent_commits, analysis.as_ref()) {
             Ok(message) => {
@@ -328,6 +334,7 @@ fn main() {
                 process::exit(1);
             }
         };
+    let elapsed = start_time.elapsed();
 
     // Copy to clipboard if requested
     if args.copy {
@@ -363,6 +370,24 @@ fn main() {
         // Show the generated commit message
         println!("{}", "Commit message:".green().bold());
         println!("{}", commit_message);
+
+        // Show stats: tokens, time, cost
+        // Rough estimate: ~4 chars per token
+        let input_tokens = (staged_changes.len() + recent_commits.len()) / 4;
+        let output_tokens = commit_message.len() / 4;
+        let total_tokens = input_tokens + output_tokens;
+        let elapsed_secs = elapsed.as_secs_f32();
+
+        let cost_str = pricing_cache
+            .get_model_pricing(&args.provider, &model_name)
+            .and_then(|p| pricing::calculate_cost(&p, input_tokens as u64, output_tokens as u64))
+            .map(|c| format!(", {}", pricing::format_cost(c)))
+            .unwrap_or_default();
+
+        println!(
+            "{}",
+            format!("~{} tokens, {:.1}s{}", total_tokens, elapsed_secs, cost_str).dimmed()
+        );
 
         // Handle commit prompt (default behavior unless --no-commit)
         if !args.no_commit {

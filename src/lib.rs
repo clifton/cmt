@@ -5,10 +5,12 @@ mod ai;
 mod analysis;
 mod config;
 mod git;
+pub mod pricing;
 mod progress;
 mod prompts;
 mod templates;
 
+pub use pricing::PricingCache;
 pub use progress::Spinner;
 
 pub use analysis::{analyze_diff, DiffAnalysis};

@@ -74,9 +74,14 @@ impl AiProvider for OpenAiProvider {
         });
 
         // GPT-5.2 supports reasoning_effort: "none" (fastest) or "low"
+        // IMPORTANT: temperature must be 1 when reasoning_effort is not "none"
         let reasoning = thinking_level.unwrap_or_default();
         let is_reasoning_model =
             model.starts_with("gpt-5") || model.contains("o1") || model.contains("o3");
+        let use_reasoning = is_reasoning_model && reasoning.openai_reasoning_enabled();
+
+        // OpenAI requires temperature=1 when reasoning is enabled
+        let effective_temp = if use_reasoning { 1.0 } else { temperature };
 
         let mut request_body = json!({
             "model": model,
@@ -90,7 +95,7 @@ impl AiProvider for OpenAiProvider {
                     "content": user_prompt
                 }
             ],
-            "temperature": temperature,
+            "temperature": effective_temp,
             "max_completion_tokens": crate::ai::DEFAULT_MAX_TOKENS,
             "tools": [
                 {

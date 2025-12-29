@@ -126,6 +126,11 @@ impl ThinkingLevel {
     pub fn claude_thinking_enabled(&self) -> bool {
         matches!(self, ThinkingLevel::Low | ThinkingLevel::High)
     }
+
+    /// Whether OpenAI reasoning is enabled (not "none")
+    pub fn openai_reasoning_enabled(&self) -> bool {
+        !matches!(self, ThinkingLevel::None)
+    }
 }
 
 /// Enhanced AI provider trait that supports more diverse providers

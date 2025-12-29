@@ -1,6 +1,6 @@
 [package]
 name = "cmt"
-version = "0.5.3"
+version = "0.5.4"
 edition = "2021"
 description = "CLI tool that generates commit messages using AI"
 authors = ["Clifton King <cliftonk@gmail.com>"]

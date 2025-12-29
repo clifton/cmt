@@ -19,27 +19,6 @@ use templates::CommitTemplate;
 
 /// Validate and fix commit data to ensure quality output
 fn validate_commit_data(mut data: CommitTemplate) -> CommitTemplate {
-    // Calculate max subject length based on type and scope
-    // Format: "type(scope): subject" or "type: subject"
-    let type_str = format!("{:?}", data.r#type).to_lowercase();
-    let prefix_len = if let Some(ref scope) = data.scope {
-        type_str.len() + scope.len() + 4 // "type(scope): "
-    } else {
-        type_str.len() + 2 // "type: "
-    };
-    let max_subject_len = 50_usize.saturating_sub(prefix_len);
-
-    // Truncate subject if too long - prefer word boundary, no ellipsis
-    if data.subject.len() > max_subject_len {
-        let truncated: String = data.subject.chars().take(max_subject_len).collect();
-        // Try to find a word boundary to truncate at
-        if let Some(last_space) = truncated.rfind(' ') {
-            data.subject = truncated[..last_space].to_string();
-        } else {
-            data.subject = truncated;
-        }
-    }
-
     // Ensure subject starts with lowercase
     if let Some(first_char) = data.subject.chars().next() {
         if first_char.is_uppercase() {

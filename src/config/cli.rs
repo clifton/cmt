@@ -1,7 +1,7 @@
 use clap::Parser;
 
 /// A CLI tool that generates commit messages using AI
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Clone)]
 #[command(author, version, about, long_about = None)]
 pub struct Args {
     /// Only output the generated commit message, without formatting

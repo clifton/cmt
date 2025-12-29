@@ -221,7 +221,7 @@ mod tests {
     fn setup() -> mockito::ServerGuard {
         let server = Server::new();
         env::set_var("OPENAI_API_KEY", "test-api-key");
-        env::set_var("OPENAI_API_BASE", &server.url());
+        env::set_var("OPENAI_API_BASE", server.url());
         server
     }
 

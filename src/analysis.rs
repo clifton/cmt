@@ -341,10 +341,7 @@ pub fn analyze_diff(repo: &Repository) -> Result<DiffAnalysis, git2::Error> {
     find_opts.renames(true);
     find_opts.copies(true);
 
-    let tree = match repo.head().and_then(|head| head.peel_to_tree()) {
-        Ok(tree) => Some(tree),
-        Err(_) => None, // New repo with no commits
-    };
+    let tree = repo.head().and_then(|head| head.peel_to_tree()).ok(); // New repo with no commits
 
     let mut diff = repo.diff_tree_to_index(tree.as_ref(), None, Some(&mut opts))?;
 

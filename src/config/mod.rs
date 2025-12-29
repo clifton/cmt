@@ -178,29 +178,21 @@ impl Config {
 
     /// Load configuration from CLI args
     pub fn from_args(args: &cli::Args) -> Self {
-        let mut config = Self::default();
-
-        config.message_only = args.message_only;
-        config.no_diff_stats = args.no_diff_stats;
-        config.show_raw_diff = args.show_raw_diff;
-        config.context_lines = args.context_lines;
-        config.max_lines_per_file = args.max_lines_per_file;
-        config.max_line_width = args.max_line_width;
-        config.provider = args.provider.clone();
-
-        if let Some(model) = &args.model {
-            config.model = Some(model.clone());
+        Self {
+            message_only: args.message_only,
+            no_diff_stats: args.no_diff_stats,
+            show_raw_diff: args.show_raw_diff,
+            context_lines: args.context_lines,
+            max_lines_per_file: args.max_lines_per_file,
+            max_line_width: args.max_line_width,
+            provider: args.provider.clone(),
+            model: args.model.clone(),
+            temperature: args.temperature,
+            include_recent_commits: defaults::defaults::INCLUDE_RECENT_COMMITS,
+            recent_commits_count: defaults::defaults::RECENT_COMMITS_COUNT,
+            template: None,
+            hint: args.hint.clone(),
         }
-
-        if let Some(temperature) = args.temperature {
-            config.temperature = Some(temperature);
-        }
-
-        if let Some(hint) = &args.hint {
-            config.hint = Some(hint.clone());
-        }
-
-        config
     }
 
     /// Load configuration from all sources (global, local, args)

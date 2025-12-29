@@ -13,6 +13,7 @@
 - ✅ Interactive commit prompt by default
 - 📋 Copy to clipboard with `-c/--copy`
 - 🧠 Configurable reasoning depth across all providers (none/minimal/low/high)
+- 💰 Shows estimated token usage, time, and cost
 
 ## Installation
 
@@ -187,7 +188,27 @@ git commit -F <(cmt -m)
 2. Pre-analysis suggests commit type and scope from file paths
 3. Sends the diff to the AI with few-shot examples and anti-patterns
 4. Post-processing validates subject length, formatting, and deduplication
-5. You review and confirm (or regenerate with a hint)
+5. Shows stats (tokens, time, estimated cost)
+6. You review and confirm (or regenerate with a hint)
+
+Example output:
+```
+Staged: 3 files +150 -42
+  src/main.rs   +100 -20
+  src/lib.rs    +30  -12
+  Cargo.toml    +20  -10
+
+Commit message:
+feat(api): add user authentication endpoint
+
+- Implement JWT token validation
+- Add password hashing with bcrypt
+- Create login and logout handlers
+
+~1250 tokens, 1.2s, $0.0008
+
+[y]es to commit, [n]o to cancel, [h]int to regenerate:
+```
 
 ## Commit Message Format
 

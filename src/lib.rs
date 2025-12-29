@@ -15,34 +15,8 @@ pub use analysis::{analyze_diff, DiffAnalysis};
 
 use templates::CommitTemplate;
 
-/// Decode common HTML entities to plain text
-fn decode_html_entities(s: &str) -> String {
-    s.replace("&#x27;", "'")
-        .replace("&#39;", "'")
-        .replace("&apos;", "'")
-        .replace("&quot;", "\"")
-        .replace("&#34;", "\"")
-        .replace("&amp;", "&")
-        .replace("&#38;", "&")
-        .replace("&lt;", "<")
-        .replace("&#60;", "<")
-        .replace("&gt;", ">")
-        .replace("&#62;", ">")
-        .replace("&nbsp;", " ")
-        .replace("&#160;", " ")
-}
-
 /// Validate and fix commit data to ensure quality output
 fn validate_commit_data(mut data: CommitTemplate) -> CommitTemplate {
-    // Decode HTML entities in all text fields
-    data.subject = decode_html_entities(&data.subject);
-    if let Some(ref mut details) = data.details {
-        *details = decode_html_entities(details);
-    }
-    if let Some(ref mut scope) = data.scope {
-        *scope = decode_html_entities(scope);
-    }
-
     // Calculate max subject length based on type and scope
     // Format: "type(scope): subject" or "type: subject"
     let type_str = format!("{:?}", data.r#type).to_lowercase();
@@ -256,21 +230,6 @@ mod tests {
     use crate::templates::CommitTemplate;
     use std::env;
     use std::error::Error;
-
-    #[test]
-    fn test_decode_html_entities() {
-        assert_eq!(decode_html_entities("&#x27;"), "'");
-        assert_eq!(decode_html_entities("&#39;"), "'");
-        assert_eq!(decode_html_entities("&apos;"), "'");
-        assert_eq!(decode_html_entities("&quot;"), "\"");
-        assert_eq!(decode_html_entities("&amp;"), "&");
-        assert_eq!(decode_html_entities("&lt;"), "<");
-        assert_eq!(decode_html_entities("&gt;"), ">");
-        assert_eq!(
-            decode_html_entities("Add &#x27;none&#x27; as default"),
-            "Add 'none' as default"
-        );
-    }
 
     #[test]
     fn test_unsupported_provider() {

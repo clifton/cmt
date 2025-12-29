@@ -2,6 +2,8 @@
 
 `cmt` is a command-line tool that generates meaningful git commit messages using AI models. It analyzes your staged changes and generates a well-formatted, descriptive commit message following conventional commit standards.
 
+<img width="489" height="317" alt="image" src="https://github.com/user-attachments/assets/91625584-ad80-48cd-a607-be79c7cf7832" />
+
 ## Features
 
 - 🤖 Supports multiple AI providers:

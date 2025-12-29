@@ -23,8 +23,7 @@
 ### Homebrew (macOS/Linux)
 
 ```bash
-brew tap clifton/tap
-brew install cmt
+brew install clifton/tap/cmt
 ```
 
 ### Using Install Script

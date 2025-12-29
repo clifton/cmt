@@ -3,6 +3,10 @@ Return only the commit message without additional text or quotes.
 Ignore lock files and focus on meaningful changes. Do not make any assumptions about other
 code that may have changed.
 
+IMPORTANT: Output plain UTF-8 text only. Do NOT use HTML entities (like &amp;, &quot;, &#x27;),
+escape sequences, or any encoded characters. Use regular ASCII/UTF-8 characters that display
+correctly in a terminal.
+
 Format:
 {type}: {subject} [max 50 chars]
 

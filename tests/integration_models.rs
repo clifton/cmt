@@ -21,11 +21,9 @@ fn has_api_key(key: &str) -> bool {
 
 /// Test that Claude's default model generates valid commit messages
 #[test]
-#[ignore] // Requires ANTHROPIC_API_KEY
 fn test_claude_default_model_works() {
     if !has_api_key("ANTHROPIC_API_KEY") {
-        eprintln!("Skipping test: ANTHROPIC_API_KEY not set");
-        return;
+        panic!("Skipping test: ANTHROPIC_API_KEY not set");
     }
 
     use cmt::defaults::DEFAULT_CLAUDE_MODEL;
@@ -83,11 +81,9 @@ diff --git a/src/main.rs b/src/main.rs
 
 /// Test that OpenAI's default model generates valid commit messages
 #[test]
-#[ignore] // Requires OPENAI_API_KEY
 fn test_openai_default_model_works() {
     if !has_api_key("OPENAI_API_KEY") {
-        eprintln!("Skipping test: OPENAI_API_KEY not set");
-        return;
+        panic!("Skipping test: OPENAI_API_KEY not set");
     }
 
     use cmt::defaults::DEFAULT_OPENAI_MODEL;
@@ -145,11 +141,9 @@ diff --git a/src/main.rs b/src/main.rs
 
 /// Test that Claude can fetch available models and the default is in the list
 #[test]
-#[ignore] // Requires ANTHROPIC_API_KEY
 fn test_claude_default_model_in_available_list() {
     if !has_api_key("ANTHROPIC_API_KEY") {
-        eprintln!("Skipping test: ANTHROPIC_API_KEY not set");
-        return;
+        panic!("Skipping test: ANTHROPIC_API_KEY not set");
     }
 
     use cmt::providers::{AiProvider, ClaudeProvider};
@@ -188,11 +182,9 @@ fn test_claude_default_model_in_available_list() {
 
 /// Test that OpenAI can fetch available models and the default is in the list
 #[test]
-#[ignore] // Requires OPENAI_API_KEY
 fn test_openai_default_model_in_available_list() {
     if !has_api_key("OPENAI_API_KEY") {
-        eprintln!("Skipping test: OPENAI_API_KEY not set");
-        return;
+        panic!("Skipping test: OPENAI_API_KEY not set");
     }
 
     use cmt::providers::{AiProvider, OpenAiProvider};
@@ -233,14 +225,12 @@ fn test_openai_default_model_in_available_list() {
 
 /// Test both providers with a realistic diff
 #[test]
-#[ignore] // Requires both API keys
 fn test_both_providers_with_realistic_diff() {
     let has_claude = has_api_key("ANTHROPIC_API_KEY");
     let has_openai = has_api_key("OPENAI_API_KEY");
 
     if !has_claude && !has_openai {
-        eprintln!("Skipping test: No API keys set");
-        return;
+        panic!("API keys for providers not set");
     }
 
     use cmt::providers::AiProvider;

@@ -1,3 +1,4 @@
+use crate::ai::http::{handle_request_error, parse_json_response};
 use crate::ai::{parse_commit_template_json, AiError, AiProvider};
 use crate::templates::CommitTemplate;
 use reqwest::blocking::Client;
@@ -6,6 +7,12 @@ use std::{env, error::Error};
 
 #[derive(Debug)]
 pub struct OpenAiProvider;
+
+impl Default for OpenAiProvider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl OpenAiProvider {
     pub fn new() -> Self {
@@ -96,24 +103,7 @@ impl AiProvider for OpenAiProvider {
                 }
             }))
             .send()
-            .map_err(|e| {
-                let error_msg = if e.is_timeout() {
-                    format!("Request timed out: {}", e)
-                } else if e.is_connect() {
-                    format!(
-                        "Connection error: {}. Please check your internet connection.",
-                        e
-                    )
-                } else if let Some(status) = e.status() {
-                    format!("API error (status {}): {}", status, e)
-                } else {
-                    format!("Unknown error: {}", e)
-                };
-                Box::new(AiError::ApiError {
-                    code: e.status().map(|s| s.as_u16()).unwrap_or(500),
-                    message: error_msg,
-                })
-            })?;
+            .map_err(handle_request_error)?;
 
         let status = response.status();
         if !status.is_success() {
@@ -136,11 +126,7 @@ impl AiProvider for OpenAiProvider {
             }));
         }
 
-        let json: Value = response.json().map_err(|e| {
-            Box::new(AiError::JsonError {
-                message: format!("Failed to parse JSON: {}", e),
-            })
-        })?;
+        let json: Value = parse_json_response(response)?;
 
         // Extract the function call arguments from the response
         let function_args = json
@@ -188,12 +174,7 @@ impl AiProvider for OpenAiProvider {
             .header("Authorization", format!("Bearer {}", api_key))
             .header("Content-Type", "application/json")
             .send()
-            .map_err(|e| {
-                Box::new(AiError::ApiError {
-                    code: e.status().map(|s| s.as_u16()).unwrap_or(500),
-                    message: format!("Failed to fetch models: {}", e),
-                })
-            })?;
+            .map_err(handle_request_error)?;
 
         let status = response.status();
         if !status.is_success() {
@@ -206,11 +187,7 @@ impl AiProvider for OpenAiProvider {
             }));
         }
 
-        let json: Value = response.json().map_err(|e| {
-            Box::new(AiError::JsonError {
-                message: format!("Failed to parse JSON: {}", e),
-            })
-        })?;
+        let json: Value = parse_json_response(response)?;
 
         let models = json
             .get("data")
@@ -227,11 +204,7 @@ impl AiProvider for OpenAiProvider {
 
         // If we couldn't get any models, return a default list
         if models.is_empty() {
-            return Ok(vec![
-                "gpt-4o".to_string(),
-                "gpt-4".to_string(),
-                "gpt-3.5-turbo".to_string(),
-            ]);
+            return Ok(vec!["gpt-5.2".to_string()]);
         }
 
         Ok(models)
@@ -248,7 +221,7 @@ mod tests {
     fn setup() -> mockito::ServerGuard {
         let server = Server::new();
         env::set_var("OPENAI_API_KEY", "test-api-key");
-        env::set_var("OPENAI_API_BASE", &server.url());
+        env::set_var("OPENAI_API_BASE", server.url());
         server
     }
 
@@ -283,7 +256,7 @@ mod tests {
 
         let provider = OpenAiProvider::new();
         let result =
-            provider.complete_structured("gpt-4o", 1.0, "test system prompt", "test user prompt");
+            provider.complete_structured("gpt-5.2", 1.0, "test system prompt", "test user prompt");
         assert!(result.is_ok());
         let message = result.unwrap();
         assert_eq!(message.r#type, CommitType::Feat);
@@ -316,7 +289,7 @@ mod tests {
 
         let provider = OpenAiProvider::new();
         let result =
-            provider.complete_structured("gpt-4o", 1.0, "test system prompt", "test user prompt");
+            provider.complete_structured("gpt-5.2", 1.0, "test system prompt", "test user prompt");
         assert!(result.is_err());
         let error = result.unwrap_err().to_string();
         assert!(error.contains("Invalid request parameters"));
@@ -396,9 +369,7 @@ mod tests {
             .with_body(
                 r#"{
                 "data": [
-                    {"id": "gpt-4o", "object": "model"},
-                    {"id": "gpt-4", "object": "model"},
-                    {"id": "gpt-3.5-turbo", "object": "model"},
+                    {"id": "gpt-5.2", "object": "model"},
                     {"id": "text-embedding-ada-002", "object": "model"}
                 ]
             }"#,
@@ -431,9 +402,7 @@ mod tests {
         // Test that fetch_available_models returns the expected models
         let models = provider.fetch_available_models().unwrap();
         assert!(!models.is_empty());
-        assert!(models.contains(&"gpt-4o".to_string()));
-        assert!(models.contains(&"gpt-4".to_string()));
-        assert!(models.contains(&"gpt-3.5-turbo".to_string()));
+        assert!(models.contains(&"gpt-5.2".to_string()));
         assert!(!models.contains(&"text-embedding-ada-002".to_string())); // Should be filtered out
 
         mock.assert();

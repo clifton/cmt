@@ -1,3 +1,4 @@
+use crate::ai::http::{handle_request_error, parse_json_response};
 use crate::ai::{parse_commit_template_json, AiError, AiProvider};
 use crate::templates::CommitTemplate;
 use reqwest::blocking::Client;
@@ -6,6 +7,12 @@ use std::{env, error::Error};
 
 #[derive(Debug)]
 pub struct ClaudeProvider;
+
+impl Default for ClaudeProvider {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 
 impl ClaudeProvider {
     pub fn new() -> Self {
@@ -77,24 +84,7 @@ impl AiProvider for ClaudeProvider {
                 }]
             }))
             .send()
-            .map_err(|e| {
-                let error_msg = if e.is_timeout() {
-                    format!("Request timed out: {}", e)
-                } else if e.is_connect() {
-                    format!(
-                        "Connection error: {}. Please check your internet connection.",
-                        e
-                    )
-                } else if let Some(status) = e.status() {
-                    format!("API error (status {}): {}", status, e)
-                } else {
-                    format!("Unknown error: {}", e)
-                };
-                Box::new(AiError::ApiError {
-                    code: e.status().map(|s| s.as_u16()).unwrap_or(500),
-                    message: error_msg,
-                })
-            })?;
+            .map_err(handle_request_error)?;
 
         let status = response.status();
         if !status.is_success() {
@@ -117,11 +107,7 @@ impl AiProvider for ClaudeProvider {
             }));
         }
 
-        let json: Value = response.json().map_err(|e| {
-            Box::new(AiError::JsonError {
-                message: format!("Failed to parse JSON: {}", e),
-            })
-        })?;
+        let json: Value = parse_json_response(response)?;
 
         if let Some(content) = json
             .get("content")
@@ -169,24 +155,7 @@ impl AiProvider for ClaudeProvider {
             .header("anthropic-version", "2023-06-01")
             .header("content-type", "application/json")
             .send()
-            .map_err(|e| {
-                let error_msg = if e.is_timeout() {
-                    format!("Request timed out: {}", e)
-                } else if e.is_connect() {
-                    format!(
-                        "Connection error: {}. Please check your internet connection.",
-                        e
-                    )
-                } else if let Some(status) = e.status() {
-                    format!("API error (status {}): {}", status, e)
-                } else {
-                    format!("Unknown error: {}", e)
-                };
-                Box::new(AiError::ApiError {
-                    code: e.status().map(|s| s.as_u16()).unwrap_or(500),
-                    message: error_msg,
-                })
-            })?;
+            .map_err(handle_request_error)?;
 
         let status = response.status();
         if !status.is_success() {
@@ -199,15 +168,10 @@ impl AiProvider for ClaudeProvider {
             }));
         }
 
-        let json: Value = response.json().map_err(|e| {
-            Box::new(AiError::ApiError {
-                code: 500,
-                message: format!("Failed to parse JSON: {}", e),
-            })
-        })?;
+        let json: Value = parse_json_response(response)?;
 
         // Extract model IDs from the response
-        let mut models = json
+        let models = json
             .get("data")
             .and_then(|data| data.as_array())
             .map(|models_array| {
@@ -227,11 +191,6 @@ impl AiProvider for ClaudeProvider {
             }));
         }
 
-        // models ending in -latest do not show up in the API response
-        if !models.contains(&self.default_model().to_string()) {
-            models.push(self.default_model().to_string());
-        }
-
         Ok(models)
     }
 }
@@ -245,7 +204,7 @@ mod tests {
     fn setup() -> mockito::ServerGuard {
         let server = Server::new();
         env::set_var("ANTHROPIC_API_KEY", "test-api-key");
-        env::set_var("ANTHROPIC_API_BASE", &server.url());
+        env::set_var("ANTHROPIC_API_BASE", server.url());
         server
     }
 
@@ -267,7 +226,7 @@ mod tests {
 
         let provider = ClaudeProvider::new();
         let result = provider.complete_structured(
-            "claude-3-7-sonnet-latest",
+            "claude-sonnet-4-5-20250929",
             0.3,
             "test system prompt",
             "test user prompt",
@@ -304,7 +263,7 @@ mod tests {
 
         let provider = ClaudeProvider::new();
         let result = provider.complete_structured(
-            "claude-3-7-sonnet-latest",
+            "claude-sonnet-4-5-20250929",
             0.3,
             "test system prompt",
             "test user prompt",
@@ -370,11 +329,8 @@ mod tests {
             .with_body(
                 r#"{
                 "data": [
-                    {"id": "claude-3-5-sonnet-20241022", "object": "model"},
-                    {"id": "claude-3-opus-20240229", "object": "model"},
-                    {"id": "claude-3-sonnet-20240229", "object": "model"},
-                    {"id": "claude-3-haiku-20240307", "object": "model"},
-                    {"id": "claude-3-5-sonnet-20240620", "object": "model"}
+                    {"id": "claude-sonnet-4-5-20250929", "object": "model"},
+                    {"id": "claude-opus-4-20250514", "object": "model"}
                 ]
             }"#,
             )
@@ -383,16 +339,10 @@ mod tests {
         let provider = ClaudeProvider::new();
         let models = provider.fetch_available_models().unwrap();
 
-        // Verify we got the expected models plus potentially the default model
-        // The default model might be added if it's not in the list
-        assert!(models.len() == 6);
-        assert!(models.contains(&"claude-3-5-sonnet-20241022".to_string()));
-        assert!(models.contains(&"claude-3-opus-20240229".to_string()));
-        assert!(models.contains(&"claude-3-sonnet-20240229".to_string()));
-        assert!(models.contains(&"claude-3-haiku-20240307".to_string()));
-        assert!(models.contains(&"claude-3-5-sonnet-20240620".to_string()));
-        // The default model should also be in the list
-        assert!(models.contains(&provider.default_model().to_string()));
+        // Verify we got the expected models from the API
+        assert!(models.len() == 2);
+        assert!(models.contains(&"claude-sonnet-4-5-20250929".to_string()));
+        assert!(models.contains(&"claude-opus-4-20250514".to_string()));
 
         models_mock.assert();
     }
@@ -458,10 +408,8 @@ mod tests {
             .with_body(
                 r#"{
                 "data": [
-                    {"id": "claude-3-5-sonnet-20241022", "object": "model"},
-                    {"id": "claude-3-opus-20240229", "object": "model"},
-                    {"id": "claude-3-sonnet-20240229", "object": "model"},
-                    {"id": "claude-3-haiku-20240307", "object": "model"}
+                    {"id": "claude-sonnet-4-5-20250929", "object": "model"},
+                    {"id": "claude-opus-4-20250514", "object": "model"}
                 ]
             }"#,
             )
@@ -493,8 +441,8 @@ mod tests {
         // Test that fetch_available_models returns the expected models
         let models = provider.fetch_available_models().unwrap();
         assert!(!models.is_empty());
-        assert!(models.contains(&"claude-3-5-sonnet-20241022".to_string()));
-        assert!(models.contains(&"claude-3-opus-20240229".to_string()));
+        assert!(models.contains(&"claude-sonnet-4-5-20250929".to_string()));
+        assert!(models.contains(&"claude-opus-4-20250514".to_string()));
 
         mock.assert();
         models_mock.assert();

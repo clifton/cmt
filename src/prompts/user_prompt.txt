@@ -1,13 +1,17 @@
-Generate a professional commit message for this diff that clearly explains the changes to your team:
+Generate a professional commit message for this diff:
 
 ```diff
 {{changes}}
 ```
 
-Requirements:
-- First line must be under 50 characters
-- Use conventional commit format (type: subject)
-- Include bullet points for important details, skip for minor changes
-- Focus on the impact and reasoning
-- Skip trivial changes
-- Doc or readme changes are not features
+Instructions:
+1. If pre-analysis was provided above, use it to help select the commit type
+2. ALWAYS verify by reading the actual diff - the analysis is a hint, not a rule
+3. Focus on the PRIMARY purpose of the change (what problem does it solve?)
+4. For the subject line: be specific, use present tense, max 50 chars
+5. For details: explain WHY, not just WHAT changed
+
+Remember the type priority hierarchy:
+fix > feat > perf > refactor > test > build > ci > chore > style > docs
+
+A one-line bug fix with extensive docs = "fix", not "docs"

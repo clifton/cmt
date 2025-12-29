@@ -2,15 +2,22 @@ pub use crate::config::cli::Args;
 pub use crate::git::{get_recent_commits, get_staged_changes, git_staged_changes};
 
 mod ai;
+mod analysis;
 mod config;
 mod git;
+mod progress;
 mod prompts;
 mod templates;
+
+pub use progress::Spinner;
+
+pub use analysis::{analyze_diff, DiffAnalysis};
 
 pub fn generate_commit_message(
     args: &Args,
     git_diff: &str,
     recent_commits: &str,
+    analysis: Option<&DiffAnalysis>,
 ) -> Result<String, Box<dyn std::error::Error>> {
     let registry = ai::create_default_registry();
     let template_name = args
@@ -31,9 +38,7 @@ pub fn generate_commit_message(
     };
 
     // Check if the provider is available (has API key)
-    if let Err(e) = provider.check_available() {
-        return Err(e);
-    }
+    provider.check_available()?;
 
     // Get the model name, defaulting to the provider's default model
     let model = args
@@ -49,7 +54,9 @@ pub fn generate_commit_message(
         prompt.push_str(recent_commits);
     }
 
-    prompt.push_str(&prompts::user_prompt(git_diff));
+    // Generate analysis summary if available
+    let analysis_summary = analysis.map(|a| a.summary());
+    prompt.push_str(&prompts::user_prompt(git_diff, analysis_summary.as_deref()));
 
     // Build the system prompt
     let mut system_prompt = prompts::system_prompt();
@@ -123,6 +130,18 @@ pub mod ai_mod {
     pub use crate::ai::{AiError, AiProvider, ProviderRegistry};
 }
 
+// Re-export AI providers for integration testing
+pub mod providers {
+    pub use crate::ai::claude::ClaudeProvider;
+    pub use crate::ai::openai::OpenAiProvider;
+    pub use crate::ai::{AiError, AiProvider};
+}
+
+// Re-export config defaults for integration testing
+pub mod defaults {
+    pub use crate::config::defaults::defaults::*;
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -142,7 +161,7 @@ mod tests {
         );
 
         // Call generate_commit_message with the unsupported provider
-        let result = generate_commit_message(&args, "", "");
+        let result = generate_commit_message(&args, "", "", None);
 
         // Verify that an error is returned
         assert!(result.is_err());
@@ -171,7 +190,7 @@ mod tests {
         );
 
         // Call generate_commit_message with the claude provider
-        let result = generate_commit_message(&args, "", "");
+        let result = generate_commit_message(&args, "", "", None);
 
         // Verify that an error is returned
         assert!(result.is_err());

@@ -135,25 +135,25 @@ impl Config {
     /// Merge with another configuration (other takes precedence)
     pub fn merge(&mut self, other: &Config) {
         // Only override non-default values
-        if other.message_only {
+        if other.message_only != defaults::defaults::MESSAGE_ONLY {
             self.message_only = other.message_only;
         }
-        if other.no_diff_stats {
+        if other.no_diff_stats != defaults::defaults::NO_DIFF_STATS {
             self.no_diff_stats = other.no_diff_stats;
         }
-        if other.show_raw_diff {
+        if other.show_raw_diff != defaults::defaults::SHOW_RAW_DIFF {
             self.show_raw_diff = other.show_raw_diff;
         }
-        if other.context_lines != 12 {
+        if other.context_lines != defaults::defaults::CONTEXT_LINES {
             self.context_lines = other.context_lines;
         }
-        if other.max_lines_per_file != 500 {
+        if other.max_lines_per_file != defaults::defaults::MAX_LINES_PER_FILE {
             self.max_lines_per_file = other.max_lines_per_file;
         }
-        if other.max_line_width != 300 {
+        if other.max_line_width != defaults::defaults::MAX_LINE_WIDTH {
             self.max_line_width = other.max_line_width;
         }
-        if other.provider != "claude" {
+        if other.provider != defaults::defaults::DEFAULT_PROVIDER {
             self.provider = other.provider.clone();
         }
         if other.model.is_some() {
@@ -162,10 +162,10 @@ impl Config {
         if other.temperature.is_some() {
             self.temperature = other.temperature;
         }
-        if !other.include_recent_commits {
+        if other.include_recent_commits != defaults::defaults::INCLUDE_RECENT_COMMITS {
             self.include_recent_commits = other.include_recent_commits;
         }
-        if other.recent_commits_count != 5 {
+        if other.recent_commits_count != defaults::defaults::RECENT_COMMITS_COUNT {
             self.recent_commits_count = other.recent_commits_count;
         }
         if other.template.is_some() {
@@ -178,29 +178,21 @@ impl Config {
 
     /// Load configuration from CLI args
     pub fn from_args(args: &cli::Args) -> Self {
-        let mut config = Self::default();
-
-        config.message_only = args.message_only;
-        config.no_diff_stats = args.no_diff_stats;
-        config.show_raw_diff = args.show_raw_diff;
-        config.context_lines = args.context_lines;
-        config.max_lines_per_file = args.max_lines_per_file;
-        config.max_line_width = args.max_line_width;
-        config.provider = args.provider.clone();
-
-        if let Some(model) = &args.model {
-            config.model = Some(model.clone());
+        Self {
+            message_only: args.message_only,
+            no_diff_stats: args.no_diff_stats,
+            show_raw_diff: args.show_raw_diff,
+            context_lines: args.context_lines,
+            max_lines_per_file: args.max_lines_per_file,
+            max_line_width: args.max_line_width,
+            provider: args.provider.clone(),
+            model: args.model.clone(),
+            temperature: args.temperature,
+            include_recent_commits: defaults::defaults::INCLUDE_RECENT_COMMITS,
+            recent_commits_count: defaults::defaults::RECENT_COMMITS_COUNT,
+            template: None,
+            hint: args.hint.clone(),
         }
-
-        if let Some(temperature) = args.temperature {
-            config.temperature = Some(temperature);
-        }
-
-        if let Some(hint) = &args.hint {
-            config.hint = Some(hint.clone());
-        }
-
-        config
     }
 
     /// Load configuration from all sources (global, local, args)

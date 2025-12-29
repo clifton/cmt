@@ -1,10 +1,12 @@
+use arboard::Clipboard;
 use cmt::ai_mod::create_default_registry;
 use cmt::config_mod::{file as config_file, Config};
 use cmt::template_mod::TemplateManager;
-use cmt::{generate_commit_message, git_staged_changes, Args};
+use cmt::{analyze_diff, generate_commit_message, git_staged_changes, Args, Spinner};
 use colored::*;
 use dotenv::dotenv;
 use git2::Repository;
+use std::io::{self, Write};
 use std::{env, process};
 
 fn main() {
@@ -235,22 +237,77 @@ fn main() {
         String::new()
     };
 
+    // Analyze the diff for better commit type classification
+    let analysis = match analyze_diff(&repo) {
+        Ok(a) => Some(a),
+        Err(e) => {
+            eprintln!("{}", "Warning: Failed to analyze diff:".yellow().bold());
+            eprintln!("{}", e);
+            None
+        }
+    };
+
     // Show raw diff if requested
     if args.show_raw_diff {
         println!("{}", "Raw diff:".cyan().bold());
         println!("{}", staged_changes);
+        if let Some(ref a) = analysis {
+            println!("\n{}", "Diff analysis:".cyan().bold());
+            println!("{}", a.summary());
+        }
         println!();
     }
 
-    // Generate commit message
-    let commit_message = match generate_commit_message(&args, &staged_changes, &recent_commits) {
-        Ok(message) => message,
-        Err(e) => {
-            eprintln!("{}", "Error generating commit message:".red().bold());
-            eprintln!("{}", e);
-            process::exit(1);
-        }
+    // Generate commit message with spinner (only in interactive mode)
+    let spinner = if !args.message_only {
+        Some(Spinner::new("Generating commit message..."))
+    } else {
+        None
     };
+
+    let commit_message =
+        match generate_commit_message(&args, &staged_changes, &recent_commits, analysis.as_ref()) {
+            Ok(message) => {
+                if let Some(s) = &spinner {
+                    s.finish_and_clear();
+                }
+                message
+            }
+            Err(e) => {
+                if let Some(s) = &spinner {
+                    s.finish_and_clear();
+                }
+                eprintln!("{}", "Error generating commit message:".red().bold());
+                eprintln!("{}", e);
+                process::exit(1);
+            }
+        };
+
+    // Copy to clipboard if requested
+    if args.copy {
+        match Clipboard::new() {
+            Ok(mut clipboard) => {
+                if let Err(e) = clipboard.set_text(&commit_message) {
+                    eprintln!(
+                        "{}",
+                        format!("Warning: Failed to copy to clipboard: {}", e)
+                            .yellow()
+                            .bold()
+                    );
+                } else if !args.message_only {
+                    println!("{}", "✓ Copied to clipboard".green());
+                }
+            }
+            Err(e) => {
+                eprintln!(
+                    "{}",
+                    format!("Warning: Failed to access clipboard: {}", e)
+                        .yellow()
+                        .bold()
+                );
+            }
+        }
+    }
 
     // Output the commit message
     if args.message_only {
@@ -295,9 +352,86 @@ fn main() {
         println!("{}", "Commit message:".green().bold());
         println!("{}", commit_message);
 
-        // Show usage hint
-        println!();
-        println!("{}", "To use this message with git commit:".cyan());
-        println!("git commit -F <(cmt --message-only)");
+        // Handle direct commit if requested
+        if args.commit {
+            let should_commit = if args.yes {
+                true
+            } else {
+                // Prompt for confirmation
+                println!();
+                print!(
+                    "{}",
+                    "Do you want to commit with this message? [y/N] ".cyan()
+                );
+                io::stdout().flush().unwrap();
+
+                let mut input = String::new();
+                if io::stdin().read_line(&mut input).is_ok() {
+                    let input = input.trim().to_lowercase();
+                    input == "y" || input == "yes"
+                } else {
+                    false
+                }
+            };
+
+            if should_commit {
+                // Create the commit using git2
+                match create_commit(&repo, &commit_message) {
+                    Ok(oid) => {
+                        println!(
+                            "{}",
+                            format!("✓ Created commit: {}", &oid.to_string()[..7])
+                                .green()
+                                .bold()
+                        );
+                    }
+                    Err(e) => {
+                        eprintln!("{}", "Error creating commit:".red().bold());
+                        eprintln!("{}", e);
+                        process::exit(1);
+                    }
+                }
+            } else {
+                println!("{}", "Commit cancelled.".yellow());
+            }
+        } else {
+            // Show usage hint
+            println!();
+            println!("{}", "To use this message with git commit:".cyan());
+            println!("git commit -F <(cmt --message-only)");
+            println!(
+                "{}",
+                "Or use --commit to commit directly with confirmation.".cyan()
+            );
+        }
     }
+}
+
+/// Create a commit with the given message
+fn create_commit(repo: &Repository, message: &str) -> Result<git2::Oid, git2::Error> {
+    let mut index = repo.index()?;
+    let tree_id = index.write_tree()?;
+    let tree = repo.find_tree(tree_id)?;
+
+    let signature = repo.signature()?;
+
+    // Get parent commit (if any)
+    let parents = match repo.head() {
+        Ok(head) => {
+            let parent = head.peel_to_commit()?;
+            vec![parent]
+        }
+        Err(_) => vec![], // Initial commit
+    };
+
+    let parent_refs: Vec<&git2::Commit> = parents.iter().collect();
+
+    repo.commit(
+        Some("HEAD"),
+        &signature,
+        &signature,
+        message,
+        &tree,
+        &parent_refs,
+    )
 }

@@ -26,8 +26,10 @@ pub mod defaults {
     // Available providers
     pub const AVAILABLE_PROVIDERS: &[&str] = &["claude", "openai"];
 
-    pub const DEFAULT_CLAUDE_MODEL: &str = "claude-3-7-sonnet-latest";
-    pub const DEFAULT_OPENAI_MODEL: &str = "gpt-4o";
+    // Last Verified: 2025-12-29 (use dated version - Anthropic API doesn't accept -latest aliases)
+    pub const DEFAULT_CLAUDE_MODEL: &str = "claude-sonnet-4-5-20250929";
+    // Last Verified: 2025-12-29
+    pub const DEFAULT_OPENAI_MODEL: &str = "gpt-5.2";
 
     // Available templates
     pub const AVAILABLE_TEMPLATES: &[&str] = &["conventional", "simple", "detailed"];
@@ -86,7 +88,7 @@ pub fn simple_template() -> String {
 
 /// Conventional commits template
 pub fn conventional_template() -> String {
-    r#"{{type}}: {{subject}}
+    r#"{{type}}{{#if scope}}({{scope}}){{/if}}: {{subject}}
 
 {{#if details}}
 {{details}}
@@ -96,7 +98,7 @@ pub fn conventional_template() -> String {
 
 /// Detailed template
 pub fn detailed_template() -> String {
-    r#"{{type}}: {{subject}}
+    r#"{{type}}{{#if scope}}({{scope}}){{/if}}: {{subject}}
 
 {{#if details}}
 {{details}}

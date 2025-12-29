@@ -201,11 +201,10 @@ pub fn get_staged_changes(
     };
 
     // Adaptive trimming: tighten context/line caps only for large diffs
-    let large_diff =
-        stats.files_changed > 40 || (stats.insertions + stats.deletions) > 4000;
+    let large_diff = stats.files_changed > 40 || (stats.insertions + stats.deletions) > 4000;
     let effective_context_lines = if large_diff {
         // Keep enough context to preserve meaning, but trim heavy payloads
-        cmp::max(3, cmp::min(context_lines, 6))
+        context_lines.clamp(3, 6)
     } else {
         context_lines
     };
@@ -280,7 +279,6 @@ fn has_unstaged_changes(repo: &Repository) -> Result<bool, GitError> {
     let diff = repo.diff_index_to_workdir(None, None)?;
     Ok(diff.stats()?.files_changed() > 0)
 }
-
 
 #[cfg(test)]
 mod tests {

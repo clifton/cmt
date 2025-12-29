@@ -118,28 +118,9 @@ impl DiffAnalysis {
 
         // Well-known scope patterns that are meaningful
         let valid_scopes = [
-            "frontend",
-            "backend",
-            "api",
-            "web",
-            "mobile",
-            "ios",
-            "android",
-            "cli",
-            "core",
-            "common",
-            "shared",
-            "server",
-            "client",
-            "ui",
-            "auth",
-            "db",
-            "database",
-            "infra",
-            "deploy",
-            "docs",
-            "test",
-            "tests",
+            "frontend", "backend", "api", "web", "mobile", "ios", "android", "cli", "core",
+            "common", "shared", "server", "client", "ui", "auth", "db", "database", "infra",
+            "deploy", "docs", "test", "tests",
         ];
 
         // Monorepo patterns that indicate scope is appropriate

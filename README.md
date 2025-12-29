@@ -242,21 +242,6 @@ Templates are stored in `~/.config/cmt/templates/` as `.hbs` files.
 
 Available variables: `{{type}}`, `{{subject}}`, `{{details}}`, `{{scope}}`, `{{breaking}}`, `{{issues}}`
 
-## Shell Aliases
-
-Add to your `~/.zshrc` or `~/.bashrc`:
-
-```bash
-# Quick commit with AI message (still prompts for confirmation)
-alias c='cmt'
-
-# Commit without confirmation
-alias cy='cmt -y'
-
-# Just show the message
-alias cm='cmt --no-commit'
-```
-
 ## License
 
 MIT License - see LICENSE file for details.

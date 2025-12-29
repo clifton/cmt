@@ -27,18 +27,14 @@ fn validate_commit_data(mut data: CommitTemplate) -> CommitTemplate {
     };
     let max_subject_len = 50_usize.saturating_sub(prefix_len);
 
-    // Truncate subject if too long
+    // Truncate subject if too long - prefer word boundary, no ellipsis
     if data.subject.len() > max_subject_len {
-        // Try to truncate at a word boundary
-        let truncated: String = data
-            .subject
-            .chars()
-            .take(max_subject_len.saturating_sub(3))
-            .collect();
+        let truncated: String = data.subject.chars().take(max_subject_len).collect();
+        // Try to find a word boundary to truncate at
         if let Some(last_space) = truncated.rfind(' ') {
-            data.subject = format!("{}...", &truncated[..last_space]);
+            data.subject = truncated[..last_space].to_string();
         } else {
-            data.subject = format!("{}...", truncated);
+            data.subject = truncated;
         }
     }
 

@@ -2,7 +2,11 @@ Generate concise, professional commit messages from git diffs.
 Output plain UTF-8 only (no HTML entities, no escape sequences).
 
 Format: {type}({scope}): {subject}
-- Subject: max 50 chars total, lowercase, present tense verb
+
+CRITICAL LENGTH RULES:
+- First line MUST be under 50 chars total (type + scope + subject)
+- Subject field MUST be under 40 chars (type/scope adds ~10)
+- If subject is too long, shorten it - NEVER exceed limits
 - Scope: optional, based on component/area changed
 - Details: optional bullet points for complex changes
 

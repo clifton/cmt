@@ -1,5 +1,7 @@
 use colored::*;
 use git2::{Error as GitError, Repository, Sort};
+use std::cmp;
+use std::path::Path;
 
 /// Stats about staged changes for display
 #[derive(Debug, Clone)]
@@ -77,6 +79,48 @@ pub struct StagedChanges {
     pub stats: DiffStats,
 }
 
+fn is_skippable(path: &Path) -> bool {
+    let name = path
+        .file_name()
+        .map(|n| n.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+    let ext = path
+        .extension()
+        .map(|e| e.to_string_lossy().to_lowercase())
+        .unwrap_or_default();
+    let path_str = path.to_string_lossy().to_lowercase();
+
+    // Lock and dependency snapshot files
+    if ext == "lock"
+        || name == "package-lock.json"
+        || name == "pnpm-lock.yaml"
+        || name == "yarn.lock"
+        || name == "cargo.lock"
+    {
+        return true;
+    }
+
+    // Large generated / compiled assets commonly not useful for commit intent
+    if ext == "map" || ext == "min.js" || ext == "min.css" {
+        return true;
+    }
+
+    // Binary/media assets that bloat prompts; the model can't interpret them meaningfully
+    if matches!(
+        ext.as_str(),
+        "png" | "jpg" | "jpeg" | "gif" | "webp" | "avif" | "bmp" | "ico" | "svg"
+    ) {
+        return true;
+    }
+
+    // Skip obvious build artifacts if staged
+    if path_str.starts_with("dist/") || path_str.starts_with("build/") {
+        return true;
+    }
+
+    false
+}
+
 pub fn get_recent_commits(repo: &Repository, count: usize) -> Result<String, GitError> {
     let mut revwalk = repo.revwalk()?;
     revwalk.set_sorting(Sort::TIME)?;
@@ -119,6 +163,7 @@ pub fn get_staged_changes(
         }
     };
 
+    // First pass: build diff and get stats
     let diff = repo
         .diff_tree_to_index(Some(&tree), None, Some(&mut opts))
         .map_err(|e| GitError::from_str(&format!("Failed to get repository diff: {}", e)))?;
@@ -155,6 +200,31 @@ pub fn get_staged_changes(
         has_unstaged: has_unstaged_changes(repo).unwrap_or(false),
     };
 
+    // Adaptive trimming: tighten context/line caps only for large diffs
+    let large_diff =
+        stats.files_changed > 40 || (stats.insertions + stats.deletions) > 4000;
+    let effective_context_lines = if large_diff {
+        // Keep enough context to preserve meaning, but trim heavy payloads
+        cmp::max(3, cmp::min(context_lines, 6))
+    } else {
+        context_lines
+    };
+    let effective_max_lines_per_file = if large_diff {
+        cmp::min(max_lines_per_file, 200)
+    } else {
+        max_lines_per_file
+    };
+
+    // If we tightened context lines, rebuild diff with the smaller context for printing
+    let diff = if effective_context_lines != context_lines {
+        let mut opts = git2::DiffOptions::new();
+        opts.context_lines(effective_context_lines);
+        repo.diff_tree_to_index(Some(&tree), None, Some(&mut opts))
+            .map_err(|e| GitError::from_str(&format!("Failed to get repository diff: {}", e)))?
+    } else {
+        diff
+    };
+
     // Build diff text
     let mut diff_str = String::new();
     let mut line_count = 0;
@@ -165,11 +235,11 @@ pub fn get_staged_changes(
             .new_file()
             .path()
             .unwrap_or_else(|| std::path::Path::new(""));
-        if file_path.extension().is_some_and(|ext| ext == "lock") {
+        if is_skippable(file_path) {
             return true; // Skip .lock files
         }
 
-        if line_count < max_lines_per_file {
+        if line_count < effective_max_lines_per_file {
             match line.origin() {
                 '+' | '-' | ' ' => {
                     // Preserve the prefix character for additions, deletions, and context

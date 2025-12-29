@@ -17,7 +17,7 @@ pub struct Args {
     pub show_raw_diff: bool,
 
     /// Number of context lines to show in the git diff
-    #[arg(long, default_value_t = 12)]
+    #[arg(long, default_value_t = 8)]
     pub context_lines: u32,
 
     /// Use a specific AI model (defaults to gemini-3-flash-preview, claude-sonnet-4-5-20250929, or gpt-5.2 depending on provider)
@@ -37,7 +37,7 @@ pub struct Args {
     pub hint: Option<String>,
 
     /// Number of maximum lines to show per file in the git diff
-    #[arg(long, default_value_t = 500)]
+    #[arg(long, default_value_t = 300)]
     pub max_lines_per_file: usize,
 
     /// Maximum line width for diffs
@@ -113,7 +113,7 @@ mod tests {
         assert!(!args.message_only);
         assert!(!args.no_diff_stats);
         assert!(!args.show_raw_diff);
-        assert_eq!(args.context_lines, 12);
+        assert_eq!(args.context_lines, 8);
         assert!(args.model.is_none());
         assert!(args.temperature.is_none());
         assert!(args.hint.is_none());

@@ -149,8 +149,11 @@ impl DiffAnalysis {
         }
 
         // File list
-        summary.push_str("\n## Changed Files\n");
-        for file in &self.files {
+        summary.push_str("\n## Changed Files (top 20 by churn)\n");
+        let mut files = self.files.clone();
+        files.sort_by_key(|f| -(f.insertions as isize + f.deletions as isize));
+        let top_n = 20usize.min(files.len());
+        for file in files.iter().take(top_n) {
             let op_indicator = match file.operation {
                 FileOperation::Added => "+",
                 FileOperation::Deleted => "-",
@@ -174,6 +177,12 @@ impl DiffAnalysis {
                     file.category.as_str()
                 ));
             }
+        }
+        if self.files.len() > top_n {
+            summary.push_str(&format!(
+                "+{} other files not listed\n",
+                self.files.len() - top_n
+            ));
         }
 
         // Suggested type

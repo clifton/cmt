@@ -227,9 +227,33 @@ fn main() {
     };
     let staged_changes = staged.diff_text.clone();
 
-    // Get recent commits if enabled
-    let recent_commits = if args.include_recent_commits {
-        match cmt::get_recent_commits(&repo, args.recent_commits_count) {
+    // Determine diff size for adaptive behaviors
+    let is_large_diff = staged.stats.files_changed > 40
+        || (staged.stats.insertions + staged.stats.deletions) > 4000;
+
+    // Get recent commits if enabled (adaptive gating and count capping on large diffs)
+    let include_recent = args.include_recent_commits && !is_large_diff;
+    let effective_recent_count = if include_recent {
+        if staged.stats.files_changed > 25
+            || (staged.stats.insertions + staged.stats.deletions) > 2000
+        {
+            args.recent_commits_count.min(3)
+        } else {
+            args.recent_commits_count
+        }
+    } else {
+        0
+    };
+
+    if args.include_recent_commits && !include_recent {
+        eprintln!(
+            "{}",
+            "Skipping recent commits for this large diff to reduce prompt size.".yellow()
+        );
+    }
+
+    let recent_commits = if include_recent {
+        match cmt::get_recent_commits(&repo, effective_recent_count) {
             Ok(commits) => commits,
             Err(e) => {
                 eprintln!(

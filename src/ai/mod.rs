@@ -75,10 +75,15 @@ pub fn parse_commit_template_json(json_str: &str) -> Result<CommitTemplate, Box<
     })
 }
 
-/// Thinking level for models that support it (e.g., Gemini 3)
+/// Thinking/reasoning level for models that support it
+/// - Gemini 3: thinkingLevel (minimal, low, high)
+/// - OpenAI GPT-5.2: reasoning_effort (none, low)
+/// - Claude Sonnet 4.5: thinking.budget_tokens (disabled or 1024+)
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
 pub enum ThinkingLevel {
-    /// Minimal thinking - fastest, least reasoning
+    /// No reasoning - fastest (OpenAI "none", Claude disabled, Gemini "minimal")
+    None,
+    /// Minimal thinking - very fast (Gemini "minimal")
     Minimal,
     /// Low thinking - balanced speed and reasoning (default)
     #[default]
@@ -91,19 +96,35 @@ impl ThinkingLevel {
     /// Parse from string (for CLI parsing)
     pub fn parse(s: &str) -> Self {
         match s.to_lowercase().as_str() {
+            "none" => ThinkingLevel::None,
             "minimal" => ThinkingLevel::Minimal,
+            "low" => ThinkingLevel::Low,
             "high" => ThinkingLevel::High,
-            _ => ThinkingLevel::Low,
+            _ => ThinkingLevel::Low, // Default to low for balanced speed/quality
         }
     }
 
-    /// Convert to API string format (lowercase for Gemini API)
-    pub fn as_api_str(&self) -> &'static str {
+    /// Convert to Gemini API format
+    pub fn as_gemini_str(&self) -> &'static str {
         match self {
-            ThinkingLevel::Minimal => "minimal",
+            ThinkingLevel::None | ThinkingLevel::Minimal => "minimal",
             ThinkingLevel::Low => "low",
             ThinkingLevel::High => "high",
         }
+    }
+
+    /// Convert to OpenAI reasoning_effort format
+    pub fn as_openai_str(&self) -> &'static str {
+        match self {
+            ThinkingLevel::None | ThinkingLevel::Minimal => "none",
+            ThinkingLevel::Low => "low",
+            ThinkingLevel::High => "low", // OpenAI max is "low" for fast mode
+        }
+    }
+
+    /// Whether Claude thinking should be enabled (only for Low/High)
+    pub fn claude_thinking_enabled(&self) -> bool {
+        matches!(self, ThinkingLevel::Low | ThinkingLevel::High)
     }
 }
 

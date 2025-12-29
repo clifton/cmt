@@ -1,5 +1,10 @@
 Generate concise, professional commit messages from git diffs.
-Output plain UTF-8 only (no HTML entities, no escape sequences).
+
+ENCODING: Plain ASCII/UTF-8 text ONLY. NEVER use:
+- HTML entities (&#x27; &#39; &apos; &quot; &amp; &lt; &gt;)
+- Unicode escapes (\u0027)
+- Any encoded characters
+Use literal characters: ' " & < >
 
 Format: {type}({scope}): {subject}
 

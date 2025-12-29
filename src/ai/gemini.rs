@@ -95,7 +95,7 @@ impl AiProvider for GeminiProvider {
                 "maxOutputTokens": DEFAULT_MAX_TOKENS,
                 "responseMimeType": "application/json",
                 "thinkingConfig": {
-                    "thinkingLevel": thinking.as_api_str()
+                    "thinkingLevel": thinking.as_gemini_str()
                 }
             })
         } else {

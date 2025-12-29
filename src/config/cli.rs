@@ -96,8 +96,8 @@ pub struct Args {
     #[arg(long, short = 'y')]
     pub yes: bool,
 
-    /// Thinking level for Gemini models (minimal, low, high) - controls reasoning depth
-    #[arg(long, default_value = "low", value_parser = ["minimal", "low", "high"])]
+    /// Reasoning depth for AI models (none=fastest, minimal, low, high)
+    #[arg(long, default_value = "low", value_parser = ["none", "minimal", "low", "high"])]
     pub thinking: String,
 }
 

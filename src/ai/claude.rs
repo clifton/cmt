@@ -50,7 +50,7 @@ impl AiProvider for ClaudeProvider {
         temperature: f32,
         system_prompt: &str,
         user_prompt: &str,
-        _thinking_level: Option<crate::ai::ThinkingLevel>,
+        thinking_level: Option<crate::ai::ThinkingLevel>,
     ) -> Result<CommitTemplate, Box<dyn Error>> {
         let api_key = Self::get_api_key()?;
         let client = Client::new();
@@ -69,21 +69,36 @@ impl AiProvider for ClaudeProvider {
             system_prompt, schema_str
         );
 
+        // Claude Sonnet 4.5 thinking: disabled by default for speed
+        // Minimum budget is 1024 tokens if enabled
+        let thinking = thinking_level.unwrap_or_default();
+        let is_thinking_model = model.contains("sonnet-4") || model.contains("opus-4");
+
+        let mut request_body = json!({
+            "model": model,
+            "max_tokens": crate::ai::DEFAULT_MAX_TOKENS,
+            "temperature": temperature,
+            "system": json_system_prompt,
+            "messages": [{
+                "role": "user",
+                "content": user_prompt
+            }]
+        });
+
+        // Add thinking config for Claude 4.x models if enabled
+        if is_thinking_model && thinking.claude_thinking_enabled() {
+            request_body["thinking"] = json!({
+                "type": "enabled",
+                "budget_tokens": 1024  // Minimum allowed
+            });
+        }
+
         let response = client
             .post(format!("{}/v1/messages", Self::api_base_url()))
             .header("x-api-key", api_key)
             .header("anthropic-version", "2023-06-01")
             .header("content-type", "application/json")
-            .json(&json!({
-                "model": model,
-                "max_tokens": crate::ai::DEFAULT_MAX_TOKENS,
-                "temperature": temperature,
-                "system": json_system_prompt,
-                "messages": [{
-                    "role": "user",
-                    "content": user_prompt
-                }]
-            }))
+            .json(&request_body)
             .send()
             .map_err(handle_request_error)?;
 

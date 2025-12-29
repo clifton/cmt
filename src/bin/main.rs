@@ -9,6 +9,12 @@ use git2::Repository;
 use std::io::{self, Write};
 use std::{env, process};
 
+enum CommitAction {
+    Commit,
+    Cancel,
+    Hint,
+}
+
 fn main() {
     dotenv().ok(); // Load .env file if it exists
     let args = Args::new_from(env::args());
@@ -354,45 +360,98 @@ fn main() {
 
         // Handle direct commit if requested
         if args.commit {
-            let should_commit = if args.yes {
-                true
-            } else {
-                // Prompt for confirmation
-                println!();
-                print!(
-                    "{}",
-                    "Do you want to commit with this message? [y/N] ".cyan()
-                );
-                io::stdout().flush().unwrap();
+            let mut current_message = commit_message.clone();
+            let mut current_args = args.clone();
 
-                let mut input = String::new();
-                if io::stdin().read_line(&mut input).is_ok() {
-                    let input = input.trim().to_lowercase();
-                    input == "y" || input == "yes"
+            loop {
+                let action = if current_args.yes {
+                    CommitAction::Commit
                 } else {
-                    false
-                }
-            };
+                    // Prompt for action
+                    println!();
+                    print!(
+                        "{}",
+                        "[y]es to commit, [n]o to cancel, [h]int to regenerate: ".cyan()
+                    );
+                    io::stdout().flush().unwrap();
 
-            if should_commit {
-                // Create the commit using git2
-                match create_commit(&repo, &commit_message) {
-                    Ok(oid) => {
-                        println!(
-                            "{}",
-                            format!("✓ Created commit: {}", &oid.to_string()[..7])
-                                .green()
-                                .bold()
-                        );
+                    let mut input = String::new();
+                    if io::stdin().read_line(&mut input).is_ok() {
+                        let input = input.trim().to_lowercase();
+                        match input.as_str() {
+                            "y" | "yes" => CommitAction::Commit,
+                            "n" | "no" | "" => CommitAction::Cancel,
+                            "h" | "hint" => CommitAction::Hint,
+                            _ => CommitAction::Cancel,
+                        }
+                    } else {
+                        CommitAction::Cancel
                     }
-                    Err(e) => {
-                        eprintln!("{}", "Error creating commit:".red().bold());
-                        eprintln!("{}", e);
-                        process::exit(1);
+                };
+
+                match action {
+                    CommitAction::Commit => {
+                        // Create the commit using git2
+                        match create_commit(&repo, &current_message) {
+                            Ok(oid) => {
+                                println!(
+                                    "{}",
+                                    format!("✓ Created commit: {}", &oid.to_string()[..7])
+                                        .green()
+                                        .bold()
+                                );
+                            }
+                            Err(e) => {
+                                eprintln!("{}", "Error creating commit:".red().bold());
+                                eprintln!("{}", e);
+                                process::exit(1);
+                            }
+                        }
+                        break;
+                    }
+                    CommitAction::Cancel => {
+                        println!("{}", "Commit cancelled.".yellow());
+                        break;
+                    }
+                    CommitAction::Hint => {
+                        // Prompt for hint
+                        print!("{}", "Enter hint: ".cyan());
+                        io::stdout().flush().unwrap();
+
+                        let mut hint_input = String::new();
+                        if io::stdin().read_line(&mut hint_input).is_ok() {
+                            let hint = hint_input.trim();
+                            if !hint.is_empty() {
+                                current_args.hint = Some(hint.to_string());
+
+                                // Regenerate with spinner
+                                let spinner = Spinner::new("Regenerating commit message...");
+                                match generate_commit_message(
+                                    &current_args,
+                                    &staged_changes,
+                                    &recent_commits,
+                                    analysis.as_ref(),
+                                ) {
+                                    Ok(new_message) => {
+                                        spinner.finish_and_clear();
+                                        current_message = new_message;
+                                        println!();
+                                        println!("{}", "Commit message:".green().bold());
+                                        println!("{}", current_message);
+                                    }
+                                    Err(e) => {
+                                        spinner.finish_and_clear();
+                                        eprintln!(
+                                            "{}",
+                                            "Error regenerating commit message:".red().bold()
+                                        );
+                                        eprintln!("{}", e);
+                                    }
+                                }
+                            }
+                        }
                     }
                 }
-            } else {
-                println!("{}", "Commit cancelled.".yellow());
             }
         } else {
             // Show usage hint

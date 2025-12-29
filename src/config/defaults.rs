@@ -1,39 +1,40 @@
-/// Default values for configuration
-pub mod defaults {
-    // General defaults
-    pub const MESSAGE_ONLY: bool = false;
-    pub const NO_DIFF_STATS: bool = false;
-    pub const SHOW_RAW_DIFF: bool = false;
-    pub const CONTEXT_LINES: u32 = 12;
-    pub const MAX_LINES_PER_FILE: usize = 500;
-    pub const MAX_LINE_WIDTH: usize = 300;
+//! Default values for configuration
 
-    // AI provider defaults
-    pub const DEFAULT_PROVIDER: &str = "claude";
+// General defaults
+pub const MESSAGE_ONLY: bool = false;
+pub const NO_DIFF_STATS: bool = false;
+pub const SHOW_RAW_DIFF: bool = false;
+pub const CONTEXT_LINES: u32 = 12;
+pub const MAX_LINES_PER_FILE: usize = 500;
+pub const MAX_LINE_WIDTH: usize = 300;
 
-    // Git defaults
-    pub const INCLUDE_RECENT_COMMITS: bool = true;
-    pub const RECENT_COMMITS_COUNT: usize = 5;
+// AI provider defaults
+pub const DEFAULT_PROVIDER: &str = "gemini";
 
-    // File paths
-    pub const DEFAULT_CONFIG_FILENAME: &str = ".cmt.toml";
-    pub const GLOBAL_CONFIG_DIRNAME: &str = ".config/cmt";
-    pub const GLOBAL_CONFIG_FILENAME: &str = "config.toml";
+// Git defaults
+pub const INCLUDE_RECENT_COMMITS: bool = true;
+pub const RECENT_COMMITS_COUNT: usize = 5;
 
-    // Template defaults
-    pub const DEFAULT_TEMPLATE: &str = "conventional";
+// File paths
+pub const DEFAULT_CONFIG_FILENAME: &str = ".cmt.toml";
+pub const GLOBAL_CONFIG_DIRNAME: &str = ".config/cmt";
+pub const GLOBAL_CONFIG_FILENAME: &str = "config.toml";
 
-    // Available providers
-    pub const AVAILABLE_PROVIDERS: &[&str] = &["claude", "openai"];
+// Template defaults
+pub const DEFAULT_TEMPLATE: &str = "conventional";
 
-    // Last Verified: 2025-12-29 (use dated version - Anthropic API doesn't accept -latest aliases)
-    pub const DEFAULT_CLAUDE_MODEL: &str = "claude-sonnet-4-5-20250929";
-    // Last Verified: 2025-12-29
-    pub const DEFAULT_OPENAI_MODEL: &str = "gpt-5.2";
+// Available providers
+pub const AVAILABLE_PROVIDERS: &[&str] = &["claude", "openai", "gemini"];
 
-    // Available templates
-    pub const AVAILABLE_TEMPLATES: &[&str] = &["conventional", "simple", "detailed"];
-}
+// Last Verified: 2025-12-29 (use dated version - Anthropic API doesn't accept -latest aliases)
+pub const DEFAULT_CLAUDE_MODEL: &str = "claude-sonnet-4-5-20250929";
+// Last Verified: 2025-12-29
+pub const DEFAULT_OPENAI_MODEL: &str = "gpt-5.2";
+// Last Verified: 2025-12-29 (use -preview suffix for Gemini 3 models)
+pub const DEFAULT_GEMINI_MODEL: &str = "gemini-3-flash-preview";
+
+// Available templates
+pub const AVAILABLE_TEMPLATES: &[&str] = &["conventional", "simple", "detailed"];
 
 /// Example configuration for initialization
 pub fn example_config() -> String {
@@ -63,18 +64,18 @@ recent_commits_count = {}
 # You can add a default hint that will be used for all commits
 # hint = "Focus on the technical details"
 "#,
-        defaults::MESSAGE_ONLY,
-        defaults::NO_DIFF_STATS,
-        defaults::SHOW_RAW_DIFF,
-        defaults::CONTEXT_LINES,
-        defaults::MAX_LINES_PER_FILE,
-        defaults::MAX_LINE_WIDTH,
-        defaults::DEFAULT_PROVIDER,
-        defaults::AVAILABLE_PROVIDERS.join(", "),
-        defaults::DEFAULT_CLAUDE_MODEL,
-        defaults::INCLUDE_RECENT_COMMITS,
-        defaults::RECENT_COMMITS_COUNT,
-        defaults::DEFAULT_TEMPLATE,
+        MESSAGE_ONLY,
+        NO_DIFF_STATS,
+        SHOW_RAW_DIFF,
+        CONTEXT_LINES,
+        MAX_LINES_PER_FILE,
+        MAX_LINE_WIDTH,
+        DEFAULT_PROVIDER,
+        AVAILABLE_PROVIDERS.join(", "),
+        DEFAULT_CLAUDE_MODEL,
+        INCLUDE_RECENT_COMMITS,
+        RECENT_COMMITS_COUNT,
+        DEFAULT_TEMPLATE,
     )
 }
 

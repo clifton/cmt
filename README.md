@@ -5,7 +5,8 @@
 ## Features
 
 - 🤖 Supports multiple AI models:
-  - Anthropic's Claude (`claude-sonnet-4-5-20250929`, default)
+  - Google's Gemini 3 Flash (`gemini-3-flash-preview`, default)
+  - Anthropic's Claude (`claude-sonnet-4-5-20250929`)
   - OpenAI's GPT-5.2
 - 📝 Follows conventional commit format (`type(scope): subject`)
 - 💡 Contextual hints to guide message generation
@@ -50,7 +51,12 @@ cargo install --path .
 Set your API key(s) either:
 1. As environment variables:
    ```bash
-   # For Claude (default)
+   # For Gemini (default)
+   export GEMINI_API_KEY='your-api-key'
+   # or
+   export GOOGLE_API_KEY='your-api-key'
+
+   # For Claude (optional)
    export ANTHROPIC_API_KEY='your-api-key'
 
    # For OpenAI (optional)
@@ -58,6 +64,7 @@ Set your API key(s) either:
    ```
 2. Or in a `.env` file in your project directory:
    ```
+   GEMINI_API_KEY=your-api-key
    ANTHROPIC_API_KEY=your-api-key
    OPENAI_API_KEY=your-api-key
    ```
@@ -70,8 +77,11 @@ Set your API key(s) either:
 # Stage your changes first
 git add .
 
-# Generate a commit message using Claude (default)
+# Generate a commit message using Gemini (default)
 cmt
+
+# Generate a commit message using Claude
+cmt --provider claude
 
 # Generate a commit message using OpenAI
 cmt --provider openai
@@ -97,7 +107,7 @@ Options:
       --context-lines <CONTEXT_LINES>
           Number of context lines to show in the git diff [default: 12]
       --model <MODEL>
-          Use a specific AI model (defaults to claude-sonnet-4-5-20250929 or gpt-5.2 depending on provider)
+          Use a specific AI model (defaults to gemini-3-flash-preview, claude-sonnet-4-5-20250929, or gpt-5.2 depending on provider)
   -t, --temperature <TEMPERATURE>
           Adjust the creativity of the generated message (0.0 to 2.0)
       --hint <HINT>
@@ -127,7 +137,7 @@ Options:
       --config-path <CONFIG_PATH>
           Path to save the configuration file (defaults to .cmt.toml in current directory)
       --provider <PROVIDER>
-          Use a specific provider (claude, openai) [default: claude]
+          Use a specific provider (gemini, claude, openai) [default: gemini]
   -c, --copy
           Copy the generated commit message to clipboard
       --commit
@@ -195,7 +205,7 @@ cmt --commit --yes
 ## How It Works
 
 1. When you run `cmt`, it analyzes your staged git changes
-2. The changes are sent to the selected AI model (Claude or GPT-4o) along with:
+2. The changes are sent to the selected AI model (Claude, GPT-5.2, or Gemini) along with:
    - A system prompt that guides the model to generate conventional commits
    - Your optional hint for additional context
    - The staged changes as the user prompt

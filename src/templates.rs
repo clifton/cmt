@@ -174,7 +174,7 @@ impl TemplateManager {
         };
 
         // Load built-in templates
-        for &template_name in config::defaults::defaults::AVAILABLE_TEMPLATES {
+        for &template_name in config::defaults::AVAILABLE_TEMPLATES {
             let template_content = match template_name {
                 "simple" => config::defaults::simple_template(),
                 "conventional" => config::defaults::conventional_template(),

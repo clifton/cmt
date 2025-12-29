@@ -153,7 +153,7 @@ impl AiProvider for OpenAiProvider {
     }
 
     fn default_model(&self) -> &str {
-        crate::config::defaults::defaults::DEFAULT_OPENAI_MODEL
+        crate::config::defaults::DEFAULT_OPENAI_MODEL
     }
 
     fn default_temperature(&self) -> f32 {

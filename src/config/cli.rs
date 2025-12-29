@@ -1,7 +1,7 @@
 use clap::Parser;
 
 /// A CLI tool that generates commit messages using AI
-#[derive(Parser, Debug)]
+#[derive(Parser, Debug, Clone)]
 #[command(author, version, about, long_about = None)]
 pub struct Args {
     /// Only output the generated commit message, without formatting
@@ -20,7 +20,7 @@ pub struct Args {
     #[arg(long, default_value_t = 12)]
     pub context_lines: u32,
 
-    /// Use a specific AI model (defaults to claude-sonnet-4-5-20250929 or gpt-5.2 depending on provider)
+    /// Use a specific AI model (defaults to gemini-3-flash-preview, claude-sonnet-4-5-20250929, or gpt-5.2 depending on provider)
     #[arg(long)]
     pub model: Option<String>,
 
@@ -80,8 +80,8 @@ pub struct Args {
     #[arg(long)]
     pub config_path: Option<String>,
 
-    /// Use a specific provider (claude, openai, etc.)
-    #[arg(long, default_value = "claude")]
+    /// Use a specific provider (gemini, claude, openai)
+    #[arg(long, default_value = "gemini")]
     pub provider: String,
 
     /// Copy the generated commit message to clipboard
@@ -121,7 +121,7 @@ mod tests {
         assert_eq!(args.recent_commits_count, 5);
         assert!(!args.init_config);
         assert!(args.config_path.is_none());
-        assert_eq!(args.provider, "claude");
+        assert_eq!(args.provider, "gemini");
         assert!(!args.list_templates);
         assert!(!args.list_models);
         assert!(args.create_template.is_none());
@@ -176,9 +176,9 @@ mod tests {
         );
         assert_eq!(args.provider, "openai");
 
-        // Default should be claude
+        // Default should be gemini
         let args = Args::new_from(["cmt"].iter().map(ToString::to_string));
-        assert_eq!(args.provider, "claude");
+        assert_eq!(args.provider, "gemini");
     }
 
     #[test]

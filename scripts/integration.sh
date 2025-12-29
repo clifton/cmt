@@ -151,7 +151,8 @@ This component handles user authentication and session management.
 git add test.txt
 
 # Capture the full output to verify both diff stats and file name
-output=$("$CMT_BIN")
+# Use --no-commit to avoid interactive prompt
+output=$("$CMT_BIN" --no-commit)
 
 # Check for "Staged:" header (new format)
 if ! echo "$output" | grep -q "Staged:"; then

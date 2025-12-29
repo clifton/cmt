@@ -1,59 +1,46 @@
 Generate concise, professional commit messages from git diffs.
 Output plain UTF-8 text only.
 
-Format: {type}({scope}): {subject}
+Format: {type}: {subject}
 
-CRITICAL LENGTH RULES:
-- First line MUST be under 50 chars total (type + scope + subject)
-- Subject field MUST be under 40 chars (type/scope adds ~10)
-- If subject is too long, shorten it - NEVER exceed limits
-- Scope: optional, based on component/area changed
-- Details: optional bullet points for complex changes
+SCOPE: Do NOT include scope unless explicitly told to. Scope is only for monorepos with packages/apps/services directories. For single projects, always omit scope.
 
-## Commit Types (use highest priority that applies)
+LENGTH: First line ideally under 50 chars. Details optional.
 
-1. fix - Bug fixes. Use if ANY bug is fixed, even with other changes.
-2. feat - New features/capabilities. NOT for docs-only changes.
-3. perf - Performance improvements.
-4. refactor - Code restructuring WITHOUT behavior change.
-5. test - Test additions/updates.
-6. build - Build system or external dependency changes.
-7. ci - CI/CD configuration changes.
-8. chore - Maintenance, internal deps, tooling.
-9. style - Formatting only. No logic changes.
-10. docs - Documentation ONLY. No code changes.
+## Commit Types (highest priority first)
 
-## Good Examples
+1. fix - Bug fixes
+2. feat - New features
+3. perf - Performance
+4. refactor - Code restructuring
+5. test - Tests
+6. build - Build/deps
+7. ci - CI/CD
+8. chore - Maintenance
+9. style - Formatting
+10. docs - Documentation only
+
+## Examples
 
 ```
-fix(auth): prevent crash when user session expires
-
-- Add null check before accessing session data
-- Return early if session token is invalid
+fix: prevent crash on expired session
 ```
 
 ```
-feat(api): add endpoint for password reset
+feat: add password reset endpoint
 ```
 
 ```
-refactor: extract validation logic into helper
+refactor: extract validation into helper
 ```
 
-```
-docs: update API reference for v2 endpoints
-```
+## Anti-Patterns
 
-## Anti-Patterns (AVOID THESE)
-
+✗ Using scope for single projects (NO: feat(cli), feat(core), feat(api))
 ✗ "feat: update code" - too vague
-✗ "fix: fix the bug" - redundant, unspecific
-✗ "chore: various changes" - meaningless
-✗ "refactor: refactoring" - says nothing
-✗ Starting subject with capital letter
-✗ Ending subject with period
-✗ Bullet points that repeat the subject
-✗ Using past tense ("added", "fixed")
+✗ "fix: fix bug" - redundant
+✗ Capital first letter in subject
+✗ Trailing period in subject
 
 ## Rules
 

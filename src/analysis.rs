@@ -109,13 +109,43 @@ pub struct DiffAnalysis {
 }
 
 impl DiffAnalysis {
-    /// Suggest a scope based on common directory or component
+    /// Suggest a scope based on common directory or component.
+    /// Only suggests scope for clearly structured projects (monorepos, large codebases).
     pub fn suggest_scope(&self) -> Option<String> {
         if self.files.is_empty() {
             return None;
         }
 
-        // Extract first meaningful directory component from each file
+        // Well-known scope patterns that are meaningful
+        let valid_scopes = [
+            "frontend",
+            "backend",
+            "api",
+            "web",
+            "mobile",
+            "ios",
+            "android",
+            "cli",
+            "core",
+            "common",
+            "shared",
+            "server",
+            "client",
+            "ui",
+            "auth",
+            "db",
+            "database",
+            "infra",
+            "deploy",
+            "docs",
+            "test",
+            "tests",
+        ];
+
+        // Monorepo patterns that indicate scope is appropriate
+        let monorepo_roots = ["packages", "apps", "libs", "services", "modules", "crates"];
+
+        // Extract meaningful directory components
         let components: Vec<Option<String>> = self
             .files
             .iter()
@@ -123,13 +153,11 @@ impl DiffAnalysis {
                 let path = Path::new(&f.path);
                 let parts: Vec<_> = path.components().collect();
 
-                // Skip if it's just a file in the root
-                if parts.len() < 2 {
+                // Skip if it's just a file in root or shallow (< 3 levels suggests small project)
+                if parts.len() < 3 {
                     return None;
                 }
 
-                // Get first directory, skip common prefixes like "src", "lib", "app"
-                let skip_prefixes = ["src", "lib", "app", "pkg", "packages", "internal", "cmd"];
                 let mut iter = parts.iter().filter_map(|c| {
                     if let std::path::Component::Normal(s) = c {
                         Some(s.to_string_lossy().to_lowercase())
@@ -139,10 +167,20 @@ impl DiffAnalysis {
                 });
 
                 let first = iter.next()?;
+
+                // If it's a monorepo root, get the package name
+                if monorepo_roots.contains(&first.as_str()) {
+                    return iter.next();
+                }
+
+                // Skip generic directories, look for meaningful scope
+                let skip_prefixes = ["src", "lib", "app", "pkg", "internal", "cmd"];
                 if skip_prefixes.contains(&first.as_str()) {
                     iter.next()
-                } else {
+                } else if valid_scopes.contains(&first.as_str()) {
                     Some(first)
+                } else {
+                    None // Don't suggest arbitrary directory names
                 }
             })
             .map(Some)
@@ -154,15 +192,20 @@ impl DiffAnalysis {
             *counts.entry(comp).or_insert(0) += 1;
         }
 
-        // If one component covers >60% of files, suggest it
+        // Only suggest if one component covers >80% of files (very clear scope)
+        // and we have multiple files (not just one file in a subdir)
         let total = self.files.len();
+        if total < 2 {
+            return None;
+        }
+
         counts
             .into_iter()
             .filter(|(name, count)| {
-                *count as f64 / total as f64 > 0.6
+                *count as f64 / total as f64 > 0.8 // Must be very dominant
                     && !name.is_empty()
-                    && name.len() <= 15 // Reasonable scope length
-                    && !name.contains('.') // Not a file extension
+                    && name.len() <= 15
+                    && !name.contains('.')
             })
             .max_by_key(|(_, count)| *count)
             .map(|(name, _)| name)
@@ -178,10 +221,6 @@ impl DiffAnalysis {
             self.total_files, self.total_insertions, self.total_deletions
         ));
 
-        // Suggested scope
-        if let Some(scope) = self.suggest_scope() {
-            summary.push_str(&format!("Suggested scope: {}\n", scope));
-        }
         summary.push('\n');
 
         // Category breakdown

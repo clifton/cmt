@@ -143,6 +143,48 @@ pub fn get_recent_commits(repo: &Repository, count: usize) -> Result<String, Git
     Ok(commit_messages)
 }
 
+/// Get the current branch name
+pub fn get_current_branch(repo: &Repository) -> Option<String> {
+    repo.head().ok().and_then(|head| {
+        if head.is_branch() {
+            head.shorthand().map(|s| s.to_string())
+        } else {
+            // Detached HEAD - return short commit hash
+            head.peel_to_commit()
+                .ok()
+                .map(|c| format!("detached@{}", &c.id().to_string()[..7]))
+        }
+    })
+}
+
+/// Get the first N lines of the README for project context
+pub fn get_readme_excerpt(repo: &Repository, max_lines: usize) -> Option<String> {
+    let workdir = repo.workdir()?;
+
+    // Try common README filenames
+    let readme_names = [
+        "README.md",
+        "README.MD",
+        "readme.md",
+        "README",
+        "README.txt",
+    ];
+
+    for name in &readme_names {
+        let path = workdir.join(name);
+        if path.exists() {
+            if let Ok(content) = std::fs::read_to_string(&path) {
+                let lines: Vec<&str> = content.lines().take(max_lines).collect();
+                if !lines.is_empty() {
+                    return Some(lines.join("\n"));
+                }
+            }
+        }
+    }
+
+    None
+}
+
 pub fn get_staged_changes(
     repo: &Repository,
     context_lines: u32,
@@ -200,16 +242,16 @@ pub fn get_staged_changes(
         has_unstaged: has_unstaged_changes(repo).unwrap_or(false),
     };
 
-    // Adaptive trimming: tighten context/line caps only for large diffs
-    let large_diff = stats.files_changed > 40 || (stats.insertions + stats.deletions) > 4000;
-    let effective_context_lines = if large_diff {
-        // Keep enough context to preserve meaning, but trim heavy payloads
-        context_lines.clamp(3, 6)
+    // Adaptive trimming: only tighten for very large diffs (Gemini Flash supports 1M tokens)
+    let very_large_diff = stats.files_changed > 100 || (stats.insertions + stats.deletions) > 20000;
+    let effective_context_lines = if very_large_diff {
+        // Still keep reasonable context even for massive diffs
+        context_lines.clamp(8, 15)
     } else {
         context_lines
     };
-    let effective_max_lines_per_file = if large_diff {
-        cmp::min(max_lines_per_file, 200)
+    let effective_max_lines_per_file = if very_large_diff {
+        cmp::min(max_lines_per_file, 500)
     } else {
         max_lines_per_file
     };

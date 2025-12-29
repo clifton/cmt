@@ -97,7 +97,7 @@ pub enum CommitType {
 // Struct for commit template with JSON-friendly fields
 #[derive(Debug, Serialize, Deserialize, PartialEq, JsonSchema)]
 #[schemars(
-    description = "Commit message data. Format: '{type}({scope}): {subject}'. Keep first line concise (ideally under 50 chars)."
+    description = "Commit message data. Format: '{type}: {subject}'. Keep first line under 50 chars. Do NOT use scope."
 )]
 pub struct CommitTemplate {
     #[serde(rename = "type")]
@@ -138,7 +138,7 @@ pub struct CommitTemplate {
     pub breaking: Option<String>,
 
     #[schemars(
-        description = "Optional scope of the change (component affected). Use lowercase with hyphens if needed (e.g., 'auth', 'ui', 'api', 'db').",
+        description = "LEAVE NULL. Only set for monorepos with packages/apps directories. Do not use for single projects.",
         title = "Scope",
         example = &"auth",
         example = &"api"

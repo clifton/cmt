@@ -1,5 +1,8 @@
 pub use crate::config::cli::Args;
-pub use crate::git::{get_recent_commits, get_staged_changes, DiffStats, StagedChanges};
+pub use crate::git::{
+    get_current_branch, get_readme_excerpt, get_recent_commits, get_staged_changes, DiffStats,
+    StagedChanges,
+};
 
 mod ai;
 mod analysis;
@@ -69,6 +72,8 @@ pub fn generate_commit_message(
     git_diff: &str,
     recent_commits: &str,
     analysis: Option<&DiffAnalysis>,
+    branch_name: Option<&str>,
+    readme_excerpt: Option<&str>,
 ) -> Result<String, Box<dyn std::error::Error>> {
     let registry = ai::create_default_registry();
     let template_name = args
@@ -100,8 +105,22 @@ pub fn generate_commit_message(
     // Build the prompt for the AI provider
     let mut prompt = String::new();
 
+    // Include README excerpt for project context
+    if let Some(readme) = readme_excerpt {
+        prompt.push_str("Project README:\n");
+        prompt.push_str(readme);
+        prompt.push_str("\n\n");
+    }
+
+    // Include branch name for context (often contains feature/ticket info)
+    if let Some(branch) = branch_name {
+        if branch != "main" && branch != "master" && !branch.starts_with("detached@") {
+            prompt.push_str(&format!("Branch: {}\n", branch));
+        }
+    }
+
     if !args.no_recent_commits && !recent_commits.is_empty() {
-        prompt.push_str("\n\nRecent commits for context:\n");
+        prompt.push_str("\nRecent commits for context:\n");
         prompt.push_str(recent_commits);
     }
 
@@ -223,7 +242,7 @@ mod tests {
         );
 
         // Call generate_commit_message with the unsupported provider
-        let result = generate_commit_message(&args, "", "", None);
+        let result = generate_commit_message(&args, "", "", None, None, None);
 
         // Verify that an error is returned
         assert!(result.is_err());
@@ -252,7 +271,7 @@ mod tests {
         );
 
         // Call generate_commit_message with the claude provider
-        let result = generate_commit_message(&args, "", "", None);
+        let result = generate_commit_message(&args, "", "", None, None, None);
 
         // Verify that an error is returned
         assert!(result.is_err());

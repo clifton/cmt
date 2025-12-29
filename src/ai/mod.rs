@@ -11,9 +11,13 @@ use std::error::Error;
 use std::fmt::Debug;
 use std::sync::Arc;
 
-pub const CLAUDE_DEFAULT_TEMP: f32 = 0.3;
-pub const OPENAI_DEFAULT_TEMP: f32 = 1.0;
-pub const GEMINI_DEFAULT_TEMP: f32 = 0.7;
+// Temperature 0.3 is optimal for structured JSON output:
+// - Low enough for reliable, consistent JSON formatting
+// - High enough for natural language variety in commit messages
+pub const DEFAULT_TEMPERATURE: f32 = 0.3;
+
+// Max output tokens - 16k is generous for commit messages
+pub const DEFAULT_MAX_TOKENS: u32 = 16384;
 
 lazy_static! {
     /// The JSON schema for CommitTemplate, generated once and reused

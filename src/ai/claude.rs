@@ -75,7 +75,7 @@ impl AiProvider for ClaudeProvider {
             .header("content-type", "application/json")
             .json(&json!({
                 "model": model,
-                "max_tokens": 1024,
+                "max_tokens": crate::ai::DEFAULT_MAX_TOKENS,
                 "temperature": temperature,
                 "system": json_system_prompt,
                 "messages": [{
@@ -136,7 +136,7 @@ impl AiProvider for ClaudeProvider {
     }
 
     fn default_temperature(&self) -> f32 {
-        crate::ai::CLAUDE_DEFAULT_TEMP
+        crate::ai::DEFAULT_TEMPERATURE
     }
 
     fn check_available(&self) -> Result<(), Box<dyn Error>> {

@@ -89,6 +89,7 @@ impl AiProvider for OpenAiProvider {
                     }
                 ],
                 "temperature": temperature,
+                "max_completion_tokens": crate::ai::DEFAULT_MAX_TOKENS,
                 "tools": [
                     {
                         "type": "function",
@@ -157,7 +158,7 @@ impl AiProvider for OpenAiProvider {
     }
 
     fn default_temperature(&self) -> f32 {
-        crate::ai::OPENAI_DEFAULT_TEMP
+        crate::ai::DEFAULT_TEMPERATURE
     }
 
     fn check_available(&self) -> Result<(), Box<dyn Error>> {

@@ -49,7 +49,7 @@ pub fn generate_commit_message(
     // Build the prompt for the AI provider
     let mut prompt = String::new();
 
-    if args.include_recent_commits && !recent_commits.is_empty() {
+    if !recent_commits.is_empty() {
         prompt.push_str("\n\nRecent commits for context:\n");
         prompt.push_str(recent_commits);
     }

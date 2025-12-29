@@ -4,90 +4,86 @@
 
 ## Features
 
-- 🤖 Supports multiple AI models:
-  - Google's Gemini 3 Flash (`gemini-3-flash-preview`, default)
+- 🤖 Supports multiple AI providers:
+  - Google's Gemini (`gemini-3-flash-preview`, default - fastest & cheapest)
   - Anthropic's Claude (`claude-sonnet-4-5-20250929`)
-  - OpenAI's GPT-5.2
+  - OpenAI's GPT (`gpt-5.2`)
 - 📝 Follows conventional commit format (`type(scope): subject`)
 - 💡 Contextual hints to guide message generation
-- 📋 Copy to clipboard with `--copy`
-- ✅ Direct commit with `--commit`
+- ✅ Interactive commit prompt by default
+- 📋 Copy to clipboard with `-c/--copy`
 
 ## Installation
 
 ### Using Install Script (Recommended)
 
-The easiest way to install `cmt` is using our install script:
-
 ```bash
 curl -sSL https://raw.githubusercontent.com/clifton/cmt/main/scripts/install.sh | sh
 ```
 
-This will automatically download and install the latest version for your platform.
-
-### Installing from crates.io
-
-You can also install `cmt` directly from crates.io:
+### From crates.io
 
 ```bash
 cargo install cmt
 ```
 
-### Installing from source
-
-Alternatively, you can build from source:
+### From source
 
 ```bash
-# Clone the repository
 git clone https://github.com/clifton/cmt.git
 cd cmt
-
-# Build and install
 cargo install --path .
 ```
 
-### Configuration
+## Configuration
 
-Set your API key(s) either:
-1. As environment variables:
-   ```bash
-   # For Gemini (default)
-   export GEMINI_API_KEY='your-api-key'
-   # or
-   export GOOGLE_API_KEY='your-api-key'
+Set your API key as an environment variable:
 
-   # For Claude (optional)
-   export ANTHROPIC_API_KEY='your-api-key'
+```bash
+# For Gemini (default provider)
+export GEMINI_API_KEY='your-api-key'
 
-   # For OpenAI (optional)
-   export OPENAI_API_KEY='your-api-key'
-   ```
-2. Or in a `.env` file in your project directory:
-   ```
-   GEMINI_API_KEY=your-api-key
-   ANTHROPIC_API_KEY=your-api-key
-   OPENAI_API_KEY=your-api-key
-   ```
+# For Claude (optional)
+export ANTHROPIC_API_KEY='your-api-key'
+
+# For OpenAI (optional)
+export OPENAI_API_KEY='your-api-key'
+```
+
+Or create a `.env` file in your project directory.
 
 ## Usage
 
 ### Basic Usage
 
 ```bash
-# Stage your changes first
+# Stage your changes
 git add .
 
-# Generate a commit message using Gemini (default)
+# Generate commit message and prompt to commit (default)
 cmt
 
-# Generate a commit message using Claude
+# Just show the message without committing
+cmt --no-commit
+
+# Commit without confirmation prompt
+cmt -y
+```
+
+### Providers
+
+```bash
+# Use Gemini (default)
+cmt
+
+# Use Claude
 cmt --provider claude
 
-# Generate a commit message using OpenAI
+# Use OpenAI
 cmt --provider openai
 
-# Use the generated message directly with git
-git commit -F <(cmt --message-only)
+# List available models for a provider
+cmt --provider openai --list-models
 ```
 
 ### Command-line Options
@@ -105,31 +101,32 @@ Options:
       --show-raw-diff
           Show the raw git diff that will be sent to the AI model
       --context-lines <CONTEXT_LINES>
-          Number of context lines to show in the git diff [default: 12]
+          Number of context lines to show in the git diff [default: 8]
       --model <MODEL>
-          Use a specific AI model (defaults to gemini-3-flash-preview, claude-sonnet-4-5-20250929, or gpt-5.2 depending on provider)
+          Use a specific AI model (defaults to gemini-3-flash-preview,
+          claude-sonnet-4-5-20250929, or gpt-5.2 depending on provider)
+      --list-models
+          List available models for the selected provider
   -t, --temperature <TEMPERATURE>
           Adjust the creativity of the generated message (0.0 to 2.0)
       --hint <HINT>
           Add a hint to guide the AI in generating the commit message
       --max-lines-per-file <MAX_LINES_PER_FILE>
-          Number of maximum lines to show per file in the git diff [default: 500]
+          Number of maximum lines to show per file in the git diff [default: 300]
       --max-line-width <MAX_LINE_WIDTH>
           Maximum line width for diffs [default: 300]
       --template <TEMPLATE>
           Use a specific template for the commit message
       --list-templates
           List all available templates
-      --list-models
-          List all available models for the selected provider
       --create-template <CREATE_TEMPLATE>
           Create a new template
       --template-content <TEMPLATE_CONTENT>
           Content for the new template (used with --create-template)
       --show-template <SHOW_TEMPLATE>
           Show the content of a specific template
-      --include-recent-commits
-          Include recent commits for context
+      --no-recent-commits
+          Disable including recent commits for context
       --recent-commits-count <RECENT_COMMITS_COUNT>
           Number of recent commits to include for context [default: 5]
       --init-config
@@ -140,10 +137,10 @@ Options:
           Use a specific provider (gemini, claude, openai) [default: gemini]
   -c, --copy
           Copy the generated commit message to clipboard
-      --commit
-          Commit directly with the generated message
+      --no-commit
+          Skip commit prompt (just show the message)
   -y, --yes
-          Skip confirmation when using --commit
+          Skip confirmation when committing
   -h, --help
           Print help
   -V, --version
@@ -153,201 +150,78 @@ Options:
 ### Examples
 
 ```bash
-# Generate a commit message with diff statistics (default)
+# Default: generate message and prompt to commit
 cmt
 
-# Show the raw git diff that will be sent to the AI
-cmt --show-raw-diff
-
-# Generate a commit message without diff statistics
-cmt --no-diff-stats
-
-# Use OpenAI with a custom temperature
-cmt --provider openai --temperature 0.8
-
-# Provide a hint for context
+# Provide context to improve the message
 cmt --hint "This fixes the login timeout issue"
 
-# List all available templates
-cmt --list-templates
+# Review message without committing
+cmt --no-commit
 
-# List all available models for the current provider
-cmt --list-models
-
-# List all available models for a specific provider
-cmt --provider openai --list-models
-
-# Show the content of a specific template
-cmt --show-template conventional
-
-# Create a custom template
-cmt --create-template my-template --template-content "{{type}}: {{subject}}\n\n{{details}}"
-
-# Use a specific template
-cmt --template detailed
-
-# Combine multiple options
-cmt --provider openai --model gpt-5.2 --hint "Update dependencies for security"
-
-# Use with git commit directly
-git commit -F <(cmt --message-only --hint "Refactor to improve performance")
-
-# Copy the commit message to clipboard
+# Copy message to clipboard
 cmt --copy
 
-# Commit directly with confirmation prompt
-cmt --commit
+# Commit immediately without prompting
+cmt -y
 
-# Commit without confirmation (for scripts/automation)
-cmt --commit --yes
+# Use a different provider with custom temperature
+cmt --provider openai -t 0.8
+
+# Pipe message to git directly
+git commit -F <(cmt -m)
 ```
 
 ## How It Works
 
-1. When you run `cmt`, it analyzes your staged git changes
-2. The changes are sent to the selected AI model (Claude, GPT-5.2, or Gemini) along with:
-   - A system prompt that guides the model to generate conventional commits
-   - Your optional hint for additional context
-   - The staged changes as the user prompt
-3. The AI generates a commit message following the conventional commit format
-4. The message is displayed (with optional diff statistics) or output directly for use with git
-
-You can view available models for each provider using the `--list-models` flag, which dynamically fetches the latest available models from the provider's API.
-
-## Template Management
-
-`cmt` supports customizable templates for formatting commit messages. Templates use the Handlebars templating language.
-
-### Available Templates
-
-By default, `cmt` comes with three built-in templates:
-- `conventional` (default): Standard conventional commit format
-- `simple`: A simplified format without the commit type
-- `detailed`: Extended format with support for breaking changes and issue references
-
-You can list all available templates with:
-```bash
-cmt --list-templates
-```
-
-### Creating Custom Templates
-
-You can create your own templates in the `~/.config/cmt/templates/` directory:
-
-```bash
-# Create a custom template
-cmt --create-template my-template --template-content "{{type}}: {{subject}}\n\n{{details}}"
-```
-
-Templates are stored as `.hbs` files and can use the following variables:
-- `{{type}}`: The commit type (feat, fix, docs, etc.)
-- `{{subject}}`: The commit subject line
-- `{{details}}`: The detailed description of changes
-- `{{scope}}`: The scope of the change (optional)
-- `{{breaking}}`: Breaking change information (optional)
-- `{{issues}}`: Related issue references (optional)
-
-### Using Templates
-
-To use a specific template:
-```bash
-cmt --template my-template
-```
-
-You can also set a default template in your `.cmt.toml` configuration file:
-```toml
-template = "my-template"
-```
+1. `cmt` analyzes your staged git changes
+2. Sends the diff to the AI model with context about conventional commits
+3. AI generates a commit message following the format: `type(scope): subject`
+4. You review and confirm (or regenerate with a hint)
 
 ## Commit Message Format
-
-The generated commit messages follow the conventional commit format:
 
 ```
 type(scope): subject
 
-- Detailed change 1
-- Detailed change 2
+- Detail about change 1
+- Detail about change 2
 ```
 
-The `scope` is optional and will be included when the AI identifies a specific area of the codebase being changed.
+Types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`, `perf`, `build`, `ci`
 
-Where `type` is one of:
-- `feat`: New features
-- `fix`: Bug fixes
-- `docs`: Documentation changes
-- `style`: Code style changes (formatting, etc.)
-- `refactor`: Code refactoring
-- `test`: Adding or modifying tests
-- `chore`: Maintenance tasks
-
-## Shell Integration
-
-Add these aliases and functions to your `~/.zshrc` or `~/.bashrc` for a smoother workflow:
+## Template Management
 
 ```bash
-# Simple alias to generate and commit in one step
-alias gc='git commit -F <(cmt --message-only)'
+# List available templates
+cmt --list-templates
 
-# Function to commit with a hint
-gcm() {
-    git commit -m "$(cmt --message-only --hint "$1")"
-}
+# Use a specific template
+cmt --template detailed
 
-# Function to generate, review, and optionally commit
-gcr() {
-    local msg=$(cmt --message-only)
-    echo "Generated commit message:"
-    echo "---"
-    echo "$msg"
-    echo "---"
-    read -p "Commit with this message? [y/N] " -n 1 -r
-    echo
-    if [[ $REPLY =~ ^[Yy]$ ]]; then
-        git commit -m "$msg"
-    fi
-}
+# Create a custom template
+cmt --create-template my-template --template-content "{{type}}: {{subject}}"
 ```
 
-Usage examples:
-```bash
-# Stage and commit with AI-generated message
-git add .
-gc
+Templates are stored in `~/.config/cmt/templates/` as `.hbs` files.
 
-# Stage and commit with a hint for context
-git add .
-gcm "This fixes the authentication bug"
+Available variables: `{{type}}`, `{{subject}}`, `{{details}}`, `{{scope}}`, `{{breaking}}`, `{{issues}}`
 
-# Review the generated message before committing
-git add .
-gcr
-```
+## Shell Aliases
 
-## Development
-
-### Building from source
+Add to your `~/.zshrc` or `~/.bashrc`:
 
 ```bash
-# Clone the repository
-git clone https://github.com/yourusername/cmt.git
-cd cmt
+# Quick commit with AI message (still prompts for confirmation)
+alias c='cmt'
 
-# Build
-cargo build
+# Commit without confirmation
+alias cy='cmt -y'
 
-# Run tests
-cargo test
-
-# Run in development
-cargo run
+# Just show the message
+alias cm='cmt --no-commit'
 ```
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
-
+MIT License - see LICENSE file for details.

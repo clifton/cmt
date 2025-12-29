@@ -64,9 +64,9 @@ pub struct Args {
     #[arg(long)]
     pub show_template: Option<String>,
 
-    /// Include recent commits for context
-    #[arg(long, default_value_t = true)]
-    pub include_recent_commits: bool,
+    /// Disable including recent commits for context
+    #[arg(long)]
+    pub no_recent_commits: bool,
 
     /// Number of recent commits to include for context
     #[arg(long, default_value_t = 5)]
@@ -88,11 +88,11 @@ pub struct Args {
     #[arg(short, long)]
     pub copy: bool,
 
-    /// Commit directly with the generated message
+    /// Skip commit prompt (just show the message)
     #[arg(long)]
-    pub commit: bool,
+    pub no_commit: bool,
 
-    /// Skip confirmation when using --commit
+    /// Skip confirmation when committing
     #[arg(long, short = 'y')]
     pub yes: bool,
 }
@@ -117,7 +117,7 @@ mod tests {
         assert!(args.model.is_none());
         assert!(args.temperature.is_none());
         assert!(args.hint.is_none());
-        assert!(args.include_recent_commits);
+        assert!(!args.no_recent_commits);
         assert_eq!(args.recent_commits_count, 5);
         assert!(!args.init_config);
         assert!(args.config_path.is_none());
@@ -140,20 +140,21 @@ mod tests {
     }
 
     #[test]
-    fn test_commit_flag() {
-        let args = Args::new_from(["cmt", "--commit"].iter().map(ToString::to_string));
-        assert!(args.commit);
-        assert!(!args.yes);
+    fn test_no_commit_flag() {
+        let args = Args::new_from(["cmt", "--no-commit"].iter().map(ToString::to_string));
+        assert!(args.no_commit);
+
+        // Default is to prompt for commit (no_commit = false)
+        let args = Args::new_from(["cmt"].iter().map(ToString::to_string));
+        assert!(!args.no_commit);
     }
 
     #[test]
-    fn test_commit_with_yes_flag() {
-        let args = Args::new_from(["cmt", "--commit", "--yes"].iter().map(ToString::to_string));
-        assert!(args.commit);
+    fn test_yes_flag() {
+        let args = Args::new_from(["cmt", "--yes"].iter().map(ToString::to_string));
         assert!(args.yes);
 
-        let args = Args::new_from(["cmt", "--commit", "-y"].iter().map(ToString::to_string));
-        assert!(args.commit);
+        let args = Args::new_from(["cmt", "-y"].iter().map(ToString::to_string));
         assert!(args.yes);
     }
 

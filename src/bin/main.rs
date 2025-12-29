@@ -232,7 +232,7 @@ fn main() {
         || (staged.stats.insertions + staged.stats.deletions) > 4000;
 
     // Get recent commits if enabled (adaptive gating and count capping on large diffs)
-    let include_recent = args.include_recent_commits && !is_large_diff;
+    let include_recent = !args.no_recent_commits && !is_large_diff;
     let effective_recent_count = if include_recent {
         if staged.stats.files_changed > 25
             || (staged.stats.insertions + staged.stats.deletions) > 2000
@@ -245,7 +245,7 @@ fn main() {
         0
     };
 
-    if args.include_recent_commits && !include_recent {
+    if !args.no_recent_commits && !include_recent {
         eprintln!(
             "{}",
             "Skipping recent commits for this large diff to reduce prompt size.".yellow()
@@ -364,8 +364,8 @@ fn main() {
         println!("{}", "Commit message:".green().bold());
         println!("{}", commit_message);
 
-        // Handle direct commit if requested
-        if args.commit {
+        // Handle commit prompt (default behavior unless --no-commit)
+        if !args.no_commit {
             let mut current_message = commit_message.clone();
             let mut current_args = args.clone();
 
@@ -459,15 +459,6 @@ fn main() {
                     }
                 }
             }
-        } else {
-            // Show usage hint
-            println!();
-            println!("{}", "To use this message with git commit:".cyan());
-            println!("git commit -F <(cmt --message-only)");
-            println!(
-                "{}",
-                "Or use --commit to commit directly with confirmation.".cyan()
-            );
         }
     }
 }

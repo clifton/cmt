@@ -81,36 +81,36 @@ recent_commits_count = {}
 
 /// Simple template
 pub fn simple_template() -> String {
-    r#"{{subject}}
+    r#"{{{subject}}}
 
-{{details}}"#
+{{{details}}}"#
         .to_string()
 }
 
-/// Conventional commits template
+/// Conventional commits template (triple braces to avoid HTML escaping)
 pub fn conventional_template() -> String {
-    r#"{{type}}{{#if scope}}({{scope}}){{/if}}: {{subject}}
+    r#"{{type}}{{#if scope}}({{{scope}}}){{/if}}: {{{subject}}}
 
 {{#if details}}
-{{details}}
+{{{details}}}
 {{/if}}"#
         .to_string()
 }
 
-/// Detailed template
+/// Detailed template (triple braces to avoid HTML escaping)
 pub fn detailed_template() -> String {
-    r#"{{type}}{{#if scope}}({{scope}}){{/if}}: {{subject}}
+    r#"{{type}}{{#if scope}}({{{scope}}}){{/if}}: {{{subject}}}
 
 {{#if details}}
-{{details}}
+{{{details}}}
 {{/if}}
 
 {{#if issues}}
-Fixes: {{issues}}
+Fixes: {{{issues}}}
 {{/if}}
 
 {{#if breaking}}
-BREAKING CHANGE: {{breaking}}
+BREAKING CHANGE: {{{breaking}}}
 {{/if}}"#
         .to_string()
 }

@@ -75,6 +75,64 @@ pub fn parse_commit_template_json(json_str: &str) -> Result<CommitTemplate, Box<
     })
 }
 
+/// Thinking/reasoning level for models that support it
+/// - Gemini 3: thinkingLevel (minimal, low, high)
+/// - OpenAI GPT-5.2: reasoning_effort (none, low)
+/// - Claude Sonnet 4.5: thinking.budget_tokens (disabled or 1024+)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ThinkingLevel {
+    /// No reasoning - fastest (OpenAI "none", Claude disabled, Gemini "minimal")
+    None,
+    /// Minimal thinking - very fast (Gemini "minimal")
+    Minimal,
+    /// Low thinking - balanced speed and reasoning (default)
+    #[default]
+    Low,
+    /// High thinking - most thorough reasoning
+    High,
+}
+
+impl ThinkingLevel {
+    /// Parse from string (for CLI parsing)
+    pub fn parse(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "none" => ThinkingLevel::None,
+            "minimal" => ThinkingLevel::Minimal,
+            "low" => ThinkingLevel::Low,
+            "high" => ThinkingLevel::High,
+            _ => ThinkingLevel::Low, // Default to low for balanced speed/quality
+        }
+    }
+
+    /// Convert to Gemini API format
+    pub fn as_gemini_str(&self) -> &'static str {
+        match self {
+            ThinkingLevel::None | ThinkingLevel::Minimal => "minimal",
+            ThinkingLevel::Low => "low",
+            ThinkingLevel::High => "high",
+        }
+    }
+
+    /// Convert to OpenAI reasoning_effort format
+    pub fn as_openai_str(&self) -> &'static str {
+        match self {
+            ThinkingLevel::None | ThinkingLevel::Minimal => "none",
+            ThinkingLevel::Low => "low",
+            ThinkingLevel::High => "low", // OpenAI max is "low" for fast mode
+        }
+    }
+
+    /// Whether Claude thinking should be enabled (only for Low/High)
+    pub fn claude_thinking_enabled(&self) -> bool {
+        matches!(self, ThinkingLevel::Low | ThinkingLevel::High)
+    }
+
+    /// Whether OpenAI reasoning is enabled (not "none")
+    pub fn openai_reasoning_enabled(&self) -> bool {
+        !matches!(self, ThinkingLevel::None)
+    }
+}
+
 /// Enhanced AI provider trait that supports more diverse providers
 pub trait AiProvider: Send + Sync + Debug {
     /// Get the name of the provider
@@ -94,6 +152,7 @@ pub trait AiProvider: Send + Sync + Debug {
         temperature: f32,
         system_prompt: &str,
         user_prompt: &str,
+        thinking_level: Option<ThinkingLevel>,
     ) -> Result<CommitTemplate, Box<dyn Error>>;
 
     /// Get the JSON schema for CommitTemplate
@@ -238,6 +297,7 @@ mod tests {
             _temperature: f32,
             _system_prompt: &str,
             _user_prompt: &str,
+            _thinking_level: Option<ThinkingLevel>,
         ) -> Result<CommitTemplate, Box<dyn Error>> {
             // Return a mock TemplateData
             Ok(CommitTemplate {
@@ -292,6 +352,7 @@ mod tests {
             0.3,
             &expected_system_prompt,
             &USER_PROMPT_TEMPLATE.replace("{{changes}}", changes),
+            None,
         );
 
         assert!(result.is_ok());
@@ -306,6 +367,7 @@ mod tests {
             0.3,
             "test system prompt",
             "test user prompt",
+            None,
         );
 
         assert!(result.is_ok());
@@ -353,6 +415,7 @@ mod tests {
             0.3,
             "test system prompt",
             "test user prompt",
+            None,
         );
 
         assert!(result.is_ok());

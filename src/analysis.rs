@@ -109,15 +109,80 @@ pub struct DiffAnalysis {
 }
 
 impl DiffAnalysis {
+    /// Suggest a scope based on common directory or component
+    pub fn suggest_scope(&self) -> Option<String> {
+        if self.files.is_empty() {
+            return None;
+        }
+
+        // Extract first meaningful directory component from each file
+        let components: Vec<Option<String>> = self
+            .files
+            .iter()
+            .filter_map(|f| {
+                let path = Path::new(&f.path);
+                let parts: Vec<_> = path.components().collect();
+
+                // Skip if it's just a file in the root
+                if parts.len() < 2 {
+                    return None;
+                }
+
+                // Get first directory, skip common prefixes like "src", "lib", "app"
+                let skip_prefixes = ["src", "lib", "app", "pkg", "packages", "internal", "cmd"];
+                let mut iter = parts.iter().filter_map(|c| {
+                    if let std::path::Component::Normal(s) = c {
+                        Some(s.to_string_lossy().to_lowercase())
+                    } else {
+                        None
+                    }
+                });
+
+                let first = iter.next()?;
+                if skip_prefixes.contains(&first.as_str()) {
+                    iter.next()
+                } else {
+                    Some(first)
+                }
+            })
+            .map(Some)
+            .collect();
+
+        // Find the most common component
+        let mut counts: HashMap<String, usize> = HashMap::new();
+        for comp in components.into_iter().flatten() {
+            *counts.entry(comp).or_insert(0) += 1;
+        }
+
+        // If one component covers >60% of files, suggest it
+        let total = self.files.len();
+        counts
+            .into_iter()
+            .filter(|(name, count)| {
+                *count as f64 / total as f64 > 0.6
+                    && !name.is_empty()
+                    && name.len() <= 15 // Reasonable scope length
+                    && !name.contains('.') // Not a file extension
+            })
+            .max_by_key(|(_, count)| *count)
+            .map(|(name, _)| name)
+    }
+
     /// Generate a summary string for the AI prompt
     pub fn summary(&self) -> String {
         let mut summary = String::new();
 
         // Overall stats
         summary.push_str(&format!(
-            "## Change Summary\n{} files changed: +{} insertions, -{} deletions\n\n",
+            "## Change Summary\n{} files changed: +{} insertions, -{} deletions\n",
             self.total_files, self.total_insertions, self.total_deletions
         ));
+
+        // Suggested scope
+        if let Some(scope) = self.suggest_scope() {
+            summary.push_str(&format!("Suggested scope: {}\n", scope));
+        }
+        summary.push('\n');
 
         // Category breakdown
         summary.push_str("## Files by Category\n");

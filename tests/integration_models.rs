@@ -66,6 +66,7 @@ diff --git a/src/main.rs b/src/main.rs
         provider.default_temperature(),
         system_prompt,
         user_prompt,
+        None,
     );
 
     match &result {
@@ -124,6 +125,7 @@ diff --git a/src/main.rs b/src/main.rs
         provider.default_temperature(),
         system_prompt,
         user_prompt,
+        None,
     );
 
     match &result {
@@ -262,6 +264,7 @@ diff --git a/src/main.rs b/src/main.rs
         provider.default_temperature(),
         system_prompt,
         user_prompt,
+        Some(cmt::providers::ThinkingLevel::Low),
     );
 
     match &result {
@@ -358,6 +361,7 @@ index 1234567..abcdefg 100644
             provider.default_temperature(),
             system_prompt,
             realistic_diff,
+            Some(cmt::providers::ThinkingLevel::Low),
         );
 
         match result {
@@ -382,6 +386,7 @@ index 1234567..abcdefg 100644
             provider.default_temperature(),
             system_prompt,
             realistic_diff,
+            None,
         );
 
         match result {
@@ -406,6 +411,7 @@ index 1234567..abcdefg 100644
             provider.default_temperature(),
             system_prompt,
             realistic_diff,
+            None,
         );
 
         match result {

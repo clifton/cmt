@@ -97,7 +97,7 @@ pub enum CommitType {
 // Struct for commit template with JSON-friendly fields
 #[derive(Debug, Serialize, Deserialize, PartialEq, JsonSchema)]
 #[schemars(
-    description = "The data for a commit message template. Format: '{type}({scope}): {subject}' (max 50 chars) on the first line, followed by optional bullet points (max 80 chars each) describing meaningful changes."
+    description = "Commit message data. CRITICAL: First line must be under 50 chars total. Format: '{type}({scope}): {subject}'. Subject MUST be under 40 chars since type+scope adds ~10 chars."
 )]
 pub struct CommitTemplate {
     #[serde(rename = "type")]
@@ -108,10 +108,11 @@ pub struct CommitTemplate {
     pub r#type: CommitType,
 
     #[schemars(
-        description = "A concise summary of the change (max 50 chars with type). Start with lowercase verb in present tense (e.g., 'add', 'fix', 'update'). Focus on 'what' and 'why', not 'how'.",
+        description = "CRITICAL: Subject must be under 40 chars (type prefix adds ~10). Start with lowercase verb (add, fix, update). Be specific but brief.",
         title = "Subject",
+        length(max = 40),
         example = &"add user login endpoint",
-        example = &"fix memory leak in image processing"
+        example = &"fix null check in auth"
     )]
     pub subject: String,
 

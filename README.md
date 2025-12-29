@@ -2,6 +2,8 @@
 
 `cmt` is a command-line tool that generates meaningful git commit messages using AI models. It analyzes your staged changes and generates a well-formatted, descriptive commit message following conventional commit standards.
 
+<img width="489" height="317" alt="image" src="https://github.com/user-attachments/assets/91625584-ad80-48cd-a607-be79c7cf7832" />
+
 ## Features
 
 - 🤖 Supports multiple AI providers:
@@ -12,6 +14,8 @@
 - 💡 Contextual hints to guide message generation
 - ✅ Interactive commit prompt by default
 - 📋 Copy to clipboard with `-c/--copy`
+- 🧠 Configurable reasoning depth across all providers (none/minimal/low/high)
+- 💰 Shows estimated token usage, time, and cost
 
 ## Installation
 
@@ -141,6 +145,8 @@ Options:
           Skip commit prompt (just show the message)
   -y, --yes
           Skip confirmation when committing
+      --thinking <THINKING>
+          Reasoning depth for AI models (none=fastest, minimal, low, high) [default: low]
   -h, --help
           Print help
   -V, --version
@@ -162,6 +168,12 @@ cmt --no-commit
 # Copy message to clipboard
 cmt --copy
 
+# Fastest mode (no reasoning)
+cmt --thinking none
+
+# Default uses low reasoning for balanced speed/quality
+cmt
+
 # Commit immediately without prompting
 cmt -y
 
@@ -175,9 +187,30 @@ git commit -F <(cmt -m)
 ## How It Works
 
 1. `cmt` analyzes your staged git changes
-2. Sends the diff to the AI model with context about conventional commits
-3. AI generates a commit message following the format: `type(scope): subject`
-4. You review and confirm (or regenerate with a hint)
+2. Pre-analysis suggests commit type and scope from file paths
+3. Sends the diff to the AI with few-shot examples and anti-patterns
+4. Post-processing validates subject length, formatting, and deduplication
+5. Shows stats (tokens, time, estimated cost)
+6. You review and confirm (or regenerate with a hint)
+
+Example output:
+```
+Staged: 3 files +150 -42
+  src/main.rs   +100 -20
+  src/lib.rs    +30  -12
+  Cargo.toml    +20  -10
+
+Commit message:
+feat(api): add user authentication endpoint
+
+- Implement JWT token validation
+- Add password hashing with bcrypt
+- Create login and logout handlers
+
+~1250 tokens, 1.2s, $0.0008
+
+[y]es to commit, [n]o to cancel, [h]int to regenerate:
+```
 
 ## Commit Message Format
 

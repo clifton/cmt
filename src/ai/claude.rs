@@ -50,6 +50,7 @@ impl AiProvider for ClaudeProvider {
         temperature: f32,
         system_prompt: &str,
         user_prompt: &str,
+        thinking_level: Option<crate::ai::ThinkingLevel>,
     ) -> Result<CommitTemplate, Box<dyn Error>> {
         let api_key = Self::get_api_key()?;
         let client = Client::new();
@@ -68,21 +69,41 @@ impl AiProvider for ClaudeProvider {
             system_prompt, schema_str
         );
 
+        // Claude Sonnet 4.5 thinking: disabled by default for speed
+        // Minimum budget is 1024 tokens if enabled
+        // IMPORTANT: temperature MUST be 1 when thinking is enabled
+        let thinking = thinking_level.unwrap_or_default();
+        let is_thinking_model = model.contains("sonnet-4") || model.contains("opus-4");
+        let use_thinking = is_thinking_model && thinking.claude_thinking_enabled();
+
+        // Claude requires temperature=1 when thinking is enabled
+        let effective_temp = if use_thinking { 1.0 } else { temperature };
+
+        let mut request_body = json!({
+            "model": model,
+            "max_tokens": crate::ai::DEFAULT_MAX_TOKENS,
+            "temperature": effective_temp,
+            "system": json_system_prompt,
+            "messages": [{
+                "role": "user",
+                "content": user_prompt
+            }]
+        });
+
+        // Add thinking config for Claude 4.x models if enabled
+        if use_thinking {
+            request_body["thinking"] = json!({
+                "type": "enabled",
+                "budget_tokens": 1024  // Minimum allowed
+            });
+        }
+
         let response = client
             .post(format!("{}/v1/messages", Self::api_base_url()))
             .header("x-api-key", api_key)
             .header("anthropic-version", "2023-06-01")
             .header("content-type", "application/json")
-            .json(&json!({
-                "model": model,
-                "max_tokens": crate::ai::DEFAULT_MAX_TOKENS,
-                "temperature": temperature,
-                "system": json_system_prompt,
-                "messages": [{
-                    "role": "user",
-                    "content": user_prompt
-                }]
-            }))
+            .json(&request_body)
             .send()
             .map_err(handle_request_error)?;
 
@@ -135,13 +156,24 @@ impl AiProvider for ClaudeProvider {
 
         let json: Value = parse_json_response(response)?;
 
-        if let Some(content) = json
+        // When thinking is enabled, response contains multiple content blocks.
+        // We need to find the "text" type block (not "thinking" blocks).
+        let text_content = json
             .get("content")
             .and_then(|content| content.as_array())
-            .and_then(|content_array| content_array.first())
-            .and_then(|first_content| first_content.get("text"))
-            .and_then(|text| text.as_str())
-        {
+            .and_then(|content_array| {
+                // Find the text block (skip thinking blocks)
+                content_array.iter().find_map(|block| {
+                    let block_type = block.get("type").and_then(|t| t.as_str());
+                    if block_type == Some("text") {
+                        block.get("text").and_then(|t| t.as_str())
+                    } else {
+                        None
+                    }
+                })
+            });
+
+        if let Some(content) = text_content {
             // Extract the JSON object from the response
             let content = content.trim();
 
@@ -245,6 +277,7 @@ mod tests {
             .with_status(200)
             .with_body(r#"{
                 "content": [{
+                    "type": "text",
                     "text": "{\"type\": \"feat\", \"subject\": \"add new feature\", \"details\": \"- Implement cool functionality\\n- Update tests\", \"issues\": null, \"breaking\": null, \"scope\": null}"
                 }]
             }"#)
@@ -256,6 +289,7 @@ mod tests {
             0.3,
             "test system prompt",
             "test user prompt",
+            None,
         );
         assert!(result.is_ok());
         let message = result.unwrap();
@@ -293,6 +327,7 @@ mod tests {
             0.3,
             "test system prompt",
             "test user prompt",
+            None,
         );
         assert!(result.is_err());
         let error = result.unwrap_err().to_string();
@@ -320,6 +355,7 @@ mod tests {
             .with_body(
                 r#"{
                 "content": [{
+                    "type": "text",
                     "text": "{\"type\": \"test\", \"subject\": \"test commit message\", \"details\": null, \"issues\": null, \"breaking\": null, \"scope\": null}"
                 }]
             }"#,
@@ -332,6 +368,7 @@ mod tests {
             0.8,
             "test system prompt",
             "test user prompt",
+            None,
         );
         assert!(result.is_ok());
         let message = result.unwrap();
@@ -447,6 +484,7 @@ mod tests {
             0.3,
             "test system prompt",
             "test user prompt",
+            None,
         );
 
         // Verify that an error is returned

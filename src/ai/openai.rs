@@ -50,6 +50,7 @@ impl AiProvider for OpenAiProvider {
         temperature: f32,
         system_prompt: &str,
         user_prompt: &str,
+        thinking_level: Option<crate::ai::ThinkingLevel>,
     ) -> Result<CommitTemplate, Box<dyn Error>> {
         let api_key = Self::get_api_key()?;
         let client = Client::new();
@@ -72,37 +73,54 @@ impl AiProvider for OpenAiProvider {
             }
         });
 
+        // GPT-5.2 supports reasoning_effort: "none" (fastest) or "low"
+        // IMPORTANT: temperature must be 1 when reasoning_effort is not "none"
+        let reasoning = thinking_level.unwrap_or_default();
+        let is_reasoning_model =
+            model.starts_with("gpt-5") || model.contains("o1") || model.contains("o3");
+        let use_reasoning = is_reasoning_model && reasoning.openai_reasoning_enabled();
+
+        // OpenAI requires temperature=1 when reasoning is enabled
+        let effective_temp = if use_reasoning { 1.0 } else { temperature };
+
+        let mut request_body = json!({
+            "model": model,
+            "messages": [
+                {
+                    "role": "system",
+                    "content": system_prompt
+                },
+                {
+                    "role": "user",
+                    "content": user_prompt
+                }
+            ],
+            "temperature": effective_temp,
+            "max_completion_tokens": crate::ai::DEFAULT_MAX_TOKENS,
+            "tools": [
+                {
+                    "type": "function",
+                    "function": function_schema
+                }
+            ],
+            "tool_choice": {
+                "type": "function",
+                "function": {
+                    "name": "generate_commit_message"
+                }
+            }
+        });
+
+        // Add reasoning_effort for GPT-5.x models
+        if is_reasoning_model {
+            request_body["reasoning_effort"] = json!(reasoning.as_openai_str());
+        }
+
         let response = client
             .post(format!("{}/v1/chat/completions", Self::api_base_url()))
             .header("Authorization", format!("Bearer {}", api_key))
             .header("Content-Type", "application/json")
-            .json(&json!({
-                "model": model,
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": system_prompt
-                    },
-                    {
-                        "role": "user",
-                        "content": user_prompt
-                    }
-                ],
-                "temperature": temperature,
-                "max_completion_tokens": crate::ai::DEFAULT_MAX_TOKENS,
-                "tools": [
-                    {
-                        "type": "function",
-                        "function": function_schema
-                    }
-                ],
-                "tool_choice": {
-                    "type": "function",
-                    "function": {
-                        "name": "generate_commit_message"
-                    }
-                }
-            }))
+            .json(&request_body)
             .send()
             .map_err(handle_request_error)?;
 
@@ -282,8 +300,13 @@ mod tests {
             .create();
 
         let provider = OpenAiProvider::new();
-        let result =
-            provider.complete_structured("gpt-5.2", 1.0, "test system prompt", "test user prompt");
+        let result = provider.complete_structured(
+            "gpt-5.2",
+            1.0,
+            "test system prompt",
+            "test user prompt",
+            None,
+        );
         assert!(result.is_ok());
         let message = result.unwrap();
         assert_eq!(message.r#type, CommitType::Feat);
@@ -315,8 +338,13 @@ mod tests {
             .create();
 
         let provider = OpenAiProvider::new();
-        let result =
-            provider.complete_structured("gpt-5.2", 1.0, "test system prompt", "test user prompt");
+        let result = provider.complete_structured(
+            "gpt-5.2",
+            1.0,
+            "test system prompt",
+            "test user prompt",
+            None,
+        );
         assert!(result.is_err());
         let error = result.unwrap_err().to_string();
         assert!(error.contains("Invalid request parameters"));
@@ -359,6 +387,7 @@ mod tests {
             0.5,
             "test system prompt",
             "test user prompt",
+            None,
         );
         assert!(result.is_ok());
         let message = result.unwrap();
@@ -409,6 +438,7 @@ mod tests {
             1.0,
             "test system prompt",
             "test user prompt",
+            None,
         );
 
         // Verify that an error is returned

@@ -147,7 +147,7 @@ impl AiProvider for GeminiProvider {
     }
 
     fn default_model(&self) -> &str {
-        crate::config::defaults::defaults::DEFAULT_GEMINI_MODEL
+        crate::config::defaults::DEFAULT_GEMINI_MODEL
     }
 
     fn default_temperature(&self) -> f32 {
@@ -343,7 +343,7 @@ mod tests {
         let provider = GeminiProvider::new();
         assert_eq!(
             provider.default_model(),
-            crate::config::defaults::defaults::DEFAULT_GEMINI_MODEL
+            crate::config::defaults::DEFAULT_GEMINI_MODEL
         );
     }
 }

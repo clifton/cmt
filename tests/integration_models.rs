@@ -2,31 +2,31 @@
 //!
 //! These tests verify that the default models for each provider are working correctly.
 //! They require valid API keys to run:
+//!   - GEMINI_API_KEY for Gemini tests
 //!   - ANTHROPIC_API_KEY for Claude tests
 //!   - OPENAI_API_KEY for OpenAI tests
-//!   - GEMINI_API_KEY or GOOGLE_API_KEY for Gemini tests
 //!
 //! Run these tests with:
-//!   cargo test --test integration_models -- --ignored
+//!   cargo test --test integration_models
 //!
 //! Or run a specific provider:
-//!   cargo test --test integration_models test_claude -- --ignored
-//!   cargo test --test integration_models test_openai -- --ignored
-//!   cargo test --test integration_models test_gemini -- --ignored
+//!   cargo test --test integration_models test_gemini
+//!   cargo test --test integration_models test_claude
+//!   cargo test --test integration_models test_openai
 
 use std::env;
 
-/// Helper to check if an API key is set
-fn has_api_key(key: &str) -> bool {
-    env::var(key).is_ok()
+/// Helper to require an API key - panics if not set
+fn require_api_key(key: &str) {
+    if env::var(key).is_err() {
+        panic!("{} environment variable not set", key);
+    }
 }
 
 /// Test that Claude's default model generates valid commit messages
 #[test]
 fn test_claude_default_model_works() {
-    if !has_api_key("ANTHROPIC_API_KEY") {
-        panic!("Skipping test: ANTHROPIC_API_KEY not set");
-    }
+    require_api_key("ANTHROPIC_API_KEY");
 
     use cmt::defaults::DEFAULT_CLAUDE_MODEL;
     use cmt::providers::{AiProvider, ClaudeProvider};
@@ -84,9 +84,7 @@ diff --git a/src/main.rs b/src/main.rs
 /// Test that OpenAI's default model generates valid commit messages
 #[test]
 fn test_openai_default_model_works() {
-    if !has_api_key("OPENAI_API_KEY") {
-        panic!("Skipping test: OPENAI_API_KEY not set");
-    }
+    require_api_key("OPENAI_API_KEY");
 
     use cmt::defaults::DEFAULT_OPENAI_MODEL;
     use cmt::providers::{AiProvider, OpenAiProvider};
@@ -144,9 +142,7 @@ diff --git a/src/main.rs b/src/main.rs
 /// Test that Claude can fetch available models and the default is in the list
 #[test]
 fn test_claude_default_model_in_available_list() {
-    if !has_api_key("ANTHROPIC_API_KEY") {
-        panic!("Skipping test: ANTHROPIC_API_KEY not set");
-    }
+    require_api_key("ANTHROPIC_API_KEY");
 
     use cmt::providers::{AiProvider, ClaudeProvider};
 
@@ -185,9 +181,7 @@ fn test_claude_default_model_in_available_list() {
 /// Test that OpenAI can fetch available models and the default is in the list
 #[test]
 fn test_openai_default_model_in_available_list() {
-    if !has_api_key("OPENAI_API_KEY") {
-        panic!("Skipping test: OPENAI_API_KEY not set");
-    }
+    require_api_key("OPENAI_API_KEY");
 
     use cmt::providers::{AiProvider, OpenAiProvider};
 
@@ -228,9 +222,7 @@ fn test_openai_default_model_in_available_list() {
 /// Test that Gemini's default model generates valid commit messages
 #[test]
 fn test_gemini_default_model_works() {
-    if !has_api_key("GEMINI_API_KEY") && !has_api_key("GOOGLE_API_KEY") {
-        panic!("Skipping test: GEMINI_API_KEY or GOOGLE_API_KEY not set");
-    }
+    require_api_key("GEMINI_API_KEY");
 
     use cmt::defaults::DEFAULT_GEMINI_MODEL;
     use cmt::providers::{AiProvider, GeminiProvider};
@@ -288,9 +280,7 @@ diff --git a/src/main.rs b/src/main.rs
 /// Test that Gemini can fetch available models and the default is in the list
 #[test]
 fn test_gemini_default_model_in_available_list() {
-    if !has_api_key("GEMINI_API_KEY") && !has_api_key("GOOGLE_API_KEY") {
-        panic!("Skipping test: GEMINI_API_KEY or GOOGLE_API_KEY not set");
-    }
+    require_api_key("GEMINI_API_KEY");
 
     use cmt::providers::{AiProvider, GeminiProvider};
 
@@ -328,13 +318,9 @@ fn test_gemini_default_model_in_available_list() {
 /// Test all providers with a realistic diff
 #[test]
 fn test_all_providers_with_realistic_diff() {
-    let has_claude = has_api_key("ANTHROPIC_API_KEY");
-    let has_openai = has_api_key("OPENAI_API_KEY");
-    let has_gemini = has_api_key("GEMINI_API_KEY") || has_api_key("GOOGLE_API_KEY");
-
-    if !has_claude && !has_openai && !has_gemini {
-        panic!("API keys for providers not set");
-    }
+    require_api_key("GEMINI_API_KEY");
+    require_api_key("ANTHROPIC_API_KEY");
+    require_api_key("OPENAI_API_KEY");
 
     use cmt::providers::AiProvider;
 
@@ -363,7 +349,32 @@ index 1234567..abcdefg 100644
 
     let system_prompt = "You are a commit message generator following conventional commits.";
 
-    if has_claude {
+    // Test Gemini
+    {
+        use cmt::providers::GeminiProvider;
+        let provider = GeminiProvider::new();
+        let result = provider.complete_structured(
+            provider.default_model(),
+            provider.default_temperature(),
+            system_prompt,
+            realistic_diff,
+        );
+
+        match result {
+            Ok(template) => {
+                println!(
+                    "✓ Gemini generated: {:?}: {}",
+                    template.r#type, template.subject
+                );
+            }
+            Err(e) => {
+                panic!("Gemini failed with realistic diff: {}", e);
+            }
+        }
+    }
+
+    // Test Claude
+    {
         use cmt::providers::ClaudeProvider;
         let provider = ClaudeProvider::new();
         let result = provider.complete_structured(
@@ -386,7 +397,8 @@ index 1234567..abcdefg 100644
         }
     }
 
-    if has_openai {
+    // Test OpenAI
+    {
         use cmt::providers::OpenAiProvider;
         let provider = OpenAiProvider::new();
         let result = provider.complete_structured(
@@ -405,29 +417,6 @@ index 1234567..abcdefg 100644
             }
             Err(e) => {
                 panic!("OpenAI failed with realistic diff: {}", e);
-            }
-        }
-    }
-
-    if has_gemini {
-        use cmt::providers::GeminiProvider;
-        let provider = GeminiProvider::new();
-        let result = provider.complete_structured(
-            provider.default_model(),
-            provider.default_temperature(),
-            system_prompt,
-            realistic_diff,
-        );
-
-        match result {
-            Ok(template) => {
-                println!(
-                    "✓ Gemini generated: {:?}: {}",
-                    template.r#type, template.subject
-                );
-            }
-            Err(e) => {
-                panic!("Gemini failed with realistic diff: {}", e);
             }
         }
     }

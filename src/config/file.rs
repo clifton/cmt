@@ -10,7 +10,7 @@ pub fn create_config_file(path: Option<&str>) -> Result<PathBuf, ConfigError> {
     let config_path = if let Some(path) = path {
         PathBuf::from(path)
     } else {
-        PathBuf::from(defaults::defaults::DEFAULT_CONFIG_FILENAME)
+        PathBuf::from(defaults::DEFAULT_CONFIG_FILENAME)
     };
 
     // Check if file already exists
@@ -37,7 +37,7 @@ pub fn create_config_file(path: Option<&str>) -> Result<PathBuf, ConfigError> {
 /// Get the global configuration directory
 pub fn global_config_dir() -> Option<PathBuf> {
     if let Ok(home) = std::env::var("HOME") {
-        Some(PathBuf::from(home).join(defaults::defaults::GLOBAL_CONFIG_DIRNAME))
+        Some(PathBuf::from(home).join(defaults::GLOBAL_CONFIG_DIRNAME))
     } else {
         None
     }
@@ -45,7 +45,7 @@ pub fn global_config_dir() -> Option<PathBuf> {
 
 /// Get the global configuration file path
 pub fn global_config_file() -> Option<PathBuf> {
-    global_config_dir().map(|dir| dir.join(defaults::defaults::GLOBAL_CONFIG_FILENAME))
+    global_config_dir().map(|dir| dir.join(defaults::GLOBAL_CONFIG_FILENAME))
 }
 
 /// Create the global configuration directory and file
@@ -62,7 +62,7 @@ pub fn create_global_config() -> Result<PathBuf, ConfigError> {
         fs::create_dir_all(&global_dir)?;
     }
 
-    let global_file = global_dir.join(defaults::defaults::GLOBAL_CONFIG_FILENAME);
+    let global_file = global_dir.join(defaults::GLOBAL_CONFIG_FILENAME);
 
     // Create file if it doesn't exist
     if !global_file.exists() {
@@ -78,7 +78,7 @@ pub fn find_project_config() -> Option<PathBuf> {
     let mut dir = current_dir.as_path();
 
     loop {
-        let config_path = dir.join(defaults::defaults::DEFAULT_CONFIG_FILENAME);
+        let config_path = dir.join(defaults::DEFAULT_CONFIG_FILENAME);
         if config_path.exists() {
             return Some(config_path);
         }
@@ -254,9 +254,7 @@ mod tests {
         env::set_var("HOME", temp_dir.path());
 
         // Create the config directory structure
-        let config_dir = temp_dir
-            .path()
-            .join(defaults::defaults::GLOBAL_CONFIG_DIRNAME);
+        let config_dir = temp_dir.path().join(defaults::GLOBAL_CONFIG_DIRNAME);
         let template_dir = config_dir.join("templates");
         fs::create_dir_all(&template_dir).unwrap();
 

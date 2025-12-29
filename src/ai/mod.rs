@@ -167,7 +167,7 @@ pub fn create_default_registry() -> ProviderRegistry {
     let mut registry = ProviderRegistry::new();
 
     // Register providers based on the available providers list
-    for &provider_name in crate::config::defaults::defaults::AVAILABLE_PROVIDERS {
+    for &provider_name in crate::config::defaults::AVAILABLE_PROVIDERS {
         match provider_name {
             "claude" => registry.register(Arc::new(claude::ClaudeProvider::new())),
             "openai" => registry.register(Arc::new(openai::OpenAiProvider::new())),

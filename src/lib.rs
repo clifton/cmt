@@ -23,7 +23,7 @@ pub fn generate_commit_message(
     let template_name = args
         .template
         .clone()
-        .unwrap_or_else(|| config::defaults::defaults::DEFAULT_TEMPLATE.to_string());
+        .unwrap_or_else(|| config::defaults::DEFAULT_TEMPLATE.to_string());
     let template_manager = templates::TemplateManager::new()?;
 
     // Get the provider from the registry
@@ -140,7 +140,7 @@ pub mod providers {
 
 // Re-export config defaults for integration testing
 pub mod defaults {
-    pub use crate::config::defaults::defaults::*;
+    pub use crate::config::defaults::*;
 }
 
 #[cfg(test)]

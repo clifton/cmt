@@ -132,7 +132,7 @@ impl AiProvider for ClaudeProvider {
     }
 
     fn default_model(&self) -> &str {
-        crate::config::defaults::defaults::DEFAULT_CLAUDE_MODEL
+        crate::config::defaults::DEFAULT_CLAUDE_MODEL
     }
 
     fn default_temperature(&self) -> f32 {

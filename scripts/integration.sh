@@ -179,28 +179,28 @@ fi
 
 echo "✓ Diff statistics display working"
 
-# Test Claude (default)
-test_provider "Claude" "" ""
+# Test Gemini (default)
+test_provider "Gemini" "--provider gemini" ""
+
+# Test Claude
+test_provider "Claude" "--provider claude" ""
 
 # Test OpenAI
 test_provider "OpenAI" "--provider openai" ""
 
-# Test Gemini (if API key is set)
-if [ -n "$GEMINI_API_KEY" ] || [ -n "$GOOGLE_API_KEY" ]; then
-    test_provider "Gemini" "--provider gemini" ""
-else
-    echo -e "\n⚠️  Skipping Gemini tests (GEMINI_API_KEY or GOOGLE_API_KEY not set)"
-fi
+# Test Gemini with hint
+test_provider "Gemini with hint" "--provider gemini" "Fix the login timeout issue"
 
 # Test Claude with hint
-test_provider "Claude with hint" "" "Fix the login timeout issue"
+test_provider "Claude with hint" "--provider claude" "Update API documentation"
 
 # Test OpenAI with hint
-test_provider "OpenAI with hint" "--provider openai" "Update API documentation"
+test_provider "OpenAI with hint" "--provider openai" "Refactor for performance"
 
 # Test invalid model error handling
-test_invalid_model "OpenAI" "--provider openai" "nonexistent-model-123"
+test_invalid_model "Gemini" "--provider gemini" "nonexistent-model-123"
 test_invalid_model "Claude" "--provider claude" "nonexistent-model-456"
+test_invalid_model "OpenAI" "--provider openai" "nonexistent-model-789"
 
 echo -e "\n✨ All integration tests passed!"
 

@@ -117,79 +117,85 @@ pub fn git_staged_changes(repo: &Repository) -> Result<(), Box<dyn std::error::E
         .map_err(|e| GitError::from_str(&format!("Failed to get repository diff: {}", e)))?;
 
     let stats = diff.stats()?;
-
-    println!("\n{}", "Diff Statistics:".blue().bold());
-
-    // Print the summary with colors
     let insertions = stats.insertions();
     let deletions = stats.deletions();
-    println!(
-        "{} files changed, {}(+) insertions, {}(-) deletions",
-        stats.files_changed(),
-        format!("{}", insertions).green(),
-        format!("{}", deletions).red(),
-    );
+    let files_changed = stats.files_changed();
 
-    // Print the per-file changes with visualization
+    // Collect per-file stats
     let mut format_opts = git2::DiffStatsFormat::empty();
     format_opts.insert(git2::DiffStatsFormat::FULL);
-    format_opts.insert(git2::DiffStatsFormat::INCLUDE_SUMMARY);
     let changes_buf = stats.to_buf(format_opts, 80)?;
-
-    // Find the longest filename for alignment
     let changes_str = String::from_utf8_lossy(&changes_buf);
-    let max_filename_len = changes_str
+
+    // Parse file changes into a clean format
+    let file_changes: Vec<(String, usize, usize)> = changes_str
         .lines()
         .filter(|line| line.contains('|'))
-        .map(|line| line.split('|').next().unwrap_or("").trim().len())
+        .filter_map(|line| {
+            let parts: Vec<&str> = line.splitn(2, '|').collect();
+            if parts.len() == 2 {
+                let file = parts[0].trim().to_string();
+                let changes = parts[1].trim();
+                let adds = changes.chars().filter(|&c| c == '+').count();
+                let dels = changes.chars().filter(|&c| c == '-').count();
+                Some((file, adds, dels))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    // Warn about unstaged changes prominently at the top
+    println!();
+    if has_unstaged_changes(repo)? {
+        println!(
+            "{}",
+            "⚠  You have unstaged changes that won't be included in this commit"
+                .yellow()
+                .bold()
+        );
+        println!();
+    }
+
+    // Print compact header
+    print!(
+        "{} {} ",
+        "Staged:".blue(),
+        format!(
+            "{} file{}",
+            files_changed,
+            if files_changed == 1 { "" } else { "s" }
+        )
+        .white()
+    );
+    if insertions > 0 {
+        print!("{} ", format!("+{}", insertions).green());
+    }
+    if deletions > 0 {
+        print!("{}", format!("-{}", deletions).red());
+    }
+    println!();
+
+    // Print file list (compact)
+    let max_len = file_changes
+        .iter()
+        .map(|(f, _, _)| f.len())
         .max()
         .unwrap_or(0);
 
-    // Print aligned file changes
-    for line in changes_str.lines() {
-        if line.contains('|') {
-            let parts: Vec<&str> = line.splitn(2, '|').collect();
-            if parts.len() == 2 {
-                let (file, changes) = (parts[0].trim(), parts[1].trim());
-                let count = changes.chars().filter(|&c| c == '+' || c == '-').count();
-
-                // Extract the numeric count from the beginning of changes
-                let num_count = changes.split_whitespace().next().unwrap_or("0");
-
-                // Print the plus/minus visualization with colors
-                print!(
-                    "{:<width$} | {:>3} {:>3} ",
-                    file,
-                    count,
-                    num_count,
-                    width = max_filename_len
-                );
-
-                // Print each character with appropriate color
-                for c in changes.chars().filter(|&c| c == '+' || c == '-') {
-                    if c == '+' {
-                        print!("{}", c.to_string().green());
-                    } else {
-                        print!("{}", c.to_string().red());
-                    }
-                }
-                println!();
-            }
+    for (file, adds, dels) in &file_changes {
+        print!("  {:<width$}", file.white(), width = max_len + 2);
+        if *adds > 0 {
+            print!("{}", format!("+{:<3}", adds).green());
+        } else {
+            print!("    ");
         }
+        if *dels > 0 {
+            print!("{}", format!("-{}", dels).red());
+        }
+        println!();
     }
-
-    // Check for unstaged changes and warn the user
-    if has_unstaged_changes(repo)? {
-        println!("\n{}", "Warning:".yellow().bold());
-        println!(
-            "{}",
-            "You have unstaged changes that won't be included in this commit.".yellow()
-        );
-        println!(
-            "{}",
-            "Use 'git add' to stage changes you want to include.".yellow()
-        );
-    }
+    println!(); // Space before next section
 
     Ok(())
 }

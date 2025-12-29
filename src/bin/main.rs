@@ -264,9 +264,26 @@ fn main() {
         println!();
     }
 
+    // Get provider and model info for display
+    let registry = create_default_registry();
+    let model_name = args
+        .model
+        .clone()
+        .unwrap_or_else(|| registry.default_model_for(&args.provider));
+
+    // Show diff stats before sending to LLM (unless message-only mode)
+    if !args.message_only && !args.no_diff_stats {
+        if let Err(e) = git_staged_changes(&repo) {
+            eprintln!("{} {}", "Warning:".yellow(), e);
+        }
+    }
+
     // Generate commit message with spinner (only in interactive mode)
     let spinner = if !args.message_only {
-        Some(Spinner::new("Generating commit message..."))
+        Some(Spinner::new(&format!(
+            "Generating commit message with {}...",
+            model_name
+        )))
     } else {
         None
     };
@@ -320,40 +337,6 @@ fn main() {
         // Output just the message for piping to git commit
         print!("{}", commit_message);
     } else {
-        // Show diff stats if not disabled
-        if !args.no_diff_stats {
-            match git_staged_changes(&repo) {
-                Ok(_) => {
-                    // The function already prints the stats, no need to print again
-                    println!(); // Add an extra newline for spacing
-                }
-                Err(e) => {
-                    eprintln!(
-                        "{}",
-                        "Warning: Failed to show diff statistics:".yellow().bold()
-                    );
-                    eprintln!("{}", e);
-                }
-            }
-        }
-
-        // Create registry to get default model
-        let registry = create_default_registry();
-        let default_model = registry.default_model_for(&args.provider);
-
-        // Show which provider and model is being used
-        println!(
-            "{}",
-            format!(
-                "Using {} {}",
-                args.provider,
-                args.model.as_deref().unwrap_or(&default_model)
-            )
-            .cyan()
-            .italic()
-        );
-        println!();
-
         // Show the generated commit message
         println!("{}", "Commit message:".green().bold());
         println!("{}", commit_message);
@@ -368,7 +351,6 @@ fn main() {
                     CommitAction::Commit
                 } else {
                     // Prompt for action
-                    println!();
                     print!(
                         "{}",
                         "[y]es to commit, [n]o to cancel, [h]int to regenerate: ".cyan()
@@ -425,7 +407,8 @@ fn main() {
                                 current_args.hint = Some(hint.to_string());
 
                                 // Regenerate with spinner
-                                let spinner = Spinner::new("Regenerating commit message...");
+                                let spinner =
+                                    Spinner::new(&format!("Regenerating with {}...", model_name));
                                 match generate_commit_message(
                                     &current_args,
                                     &staged_changes,

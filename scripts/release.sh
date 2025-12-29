@@ -38,6 +38,8 @@ else
     fi
 fi
 
+GITHUB_RELEASE_CREATED=false
+
 # Default to patch if no argument provided
 BUMP_TYPE=${1:-patch}
 
@@ -166,6 +168,7 @@ if [ "$should_push" = "y" ] || [ "$should_push" = "Y" ]; then
                 --notes-file - \
                 --target main
             info "Created GitHub release v$NEW_VERSION"
+            GITHUB_RELEASE_CREATED=true
         else
             echo "Skipped GitHub release creation"
         fi
@@ -201,6 +204,35 @@ else
     echo "Skipped publishing to crates.io"
 fi
 
+# Ask for confirmation before updating Homebrew
+echo ""
+read -p "Would you like to update Homebrew tap? (y/N) " should_homebrew
+if [ "$should_homebrew" = "y" ] || [ "$should_homebrew" = "Y" ]; then
+    if [ "$GITHUB_RELEASE_CREATED" != "true" ]; then
+        warn "GitHub release was not created. Homebrew update requires release binaries."
+        echo "Please ensure binaries are uploaded to the GitHub release first."
+        read -p "Continue anyway? (y/N) " continue_homebrew
+        if [ "$continue_homebrew" != "y" ] && [ "$continue_homebrew" != "Y" ]; then
+            echo "Skipped Homebrew update"
+        else
+            SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+            "$SCRIPT_DIR/update-homebrew.sh" "$NEW_VERSION"
+        fi
+    else
+        echo ""
+        echo "Note: If you have GitHub Actions building release binaries,"
+        echo "      the script will wait for them to be available."
+        echo ""
+        SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+        "$SCRIPT_DIR/update-homebrew.sh" "$NEW_VERSION"
+    fi
+else
+    echo "Skipped Homebrew update"
+    echo ""
+    echo "To update Homebrew manually later, run:"
+    echo "  ./scripts/update-homebrew.sh $NEW_VERSION"
+fi
+
 echo ""
 info "Release process complete!"
 echo ""
@@ -215,4 +247,7 @@ if [ "$should_push" = "y" ] || [ "$should_push" = "Y" ]; then
 fi
 if [ "$should_publish" = "y" ] || [ "$should_publish" = "Y" ]; then
     echo "  • Published to crates.io: Yes"
+fi
+if [ "$should_homebrew" = "y" ] || [ "$should_homebrew" = "Y" ]; then
+    echo "  • Homebrew tap: Updated"
 fi

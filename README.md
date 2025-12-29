@@ -20,7 +20,14 @@
 
 ## Installation
 
-### Using Install Script (Recommended)
+### Homebrew (macOS/Linux)
+
+```bash
+brew tap clifton/tap
+brew install cmt
+```
+
+### Using Install Script
 
 ```bash
 curl -sSL https://raw.githubusercontent.com/clifton/cmt/main/scripts/install.sh | sh

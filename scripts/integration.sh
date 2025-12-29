@@ -37,8 +37,8 @@ test_provider() {
     echo "Generated message:"
     echo "$message"
 
-    # Verify conventional commit format
-    if ! echo "$message" | grep -q "^[a-z]\+: .*$"; then
+    # Verify conventional commit format (allows optional scope: type(scope): subject or type: subject)
+    if ! echo "$message" | grep -qE "^[a-z]+(\([^)]*\))?: .+$"; then
         echo "❌ Failed: Message doesn't follow conventional commit format"
         echo "Message was: $message"
         exit 1
@@ -51,8 +51,8 @@ test_provider() {
     echo "Commit message:"
     echo "$commit_msg"
 
-    # Verify the commit message
-    if ! echo "$commit_msg" | grep -q "^[a-z]\+: .*$"; then
+    # Verify the commit message (allows optional scope: type(scope): subject or type: subject)
+    if ! echo "$commit_msg" | grep -qE "^[a-z]+(\([^)]*\))?: .+$"; then
         echo "❌ Failed: Commit message doesn't follow conventional format"
         echo "Message was: $commit_msg"
         exit 1

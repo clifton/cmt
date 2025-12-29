@@ -1,4 +1,5 @@
 pub mod claude;
+pub mod gemini;
 mod http;
 pub mod openai;
 
@@ -12,6 +13,7 @@ use std::sync::Arc;
 
 pub const CLAUDE_DEFAULT_TEMP: f32 = 0.3;
 pub const OPENAI_DEFAULT_TEMP: f32 = 1.0;
+pub const GEMINI_DEFAULT_TEMP: f32 = 0.7;
 
 lazy_static! {
     /// The JSON schema for CommitTemplate, generated once and reused
@@ -169,6 +171,7 @@ pub fn create_default_registry() -> ProviderRegistry {
         match provider_name {
             "claude" => registry.register(Arc::new(claude::ClaudeProvider::new())),
             "openai" => registry.register(Arc::new(openai::OpenAiProvider::new())),
+            "gemini" => registry.register(Arc::new(gemini::GeminiProvider::new())),
             _ => {} // Skip unknown providers
         }
     }

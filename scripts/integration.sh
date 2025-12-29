@@ -185,6 +185,13 @@ test_provider "Claude" "" ""
 # Test OpenAI
 test_provider "OpenAI" "--provider openai" ""
 
+# Test Gemini (if API key is set)
+if [ -n "$GEMINI_API_KEY" ] || [ -n "$GOOGLE_API_KEY" ]; then
+    test_provider "Gemini" "--provider gemini" ""
+else
+    echo -e "\n⚠️  Skipping Gemini tests (GEMINI_API_KEY or GOOGLE_API_KEY not set)"
+fi
+
 # Test Claude with hint
 test_provider "Claude with hint" "" "Fix the login timeout issue"
 

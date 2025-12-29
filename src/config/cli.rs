@@ -80,7 +80,7 @@ pub struct Args {
     #[arg(long)]
     pub config_path: Option<String>,
 
-    /// Use a specific provider (claude, openai, etc.)
+    /// Use a specific provider (claude, openai, gemini)
     #[arg(long, default_value = "claude")]
     pub provider: String,
 

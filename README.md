@@ -10,11 +10,12 @@
   - Google's Gemini (`gemini-3-flash-preview`, default - fastest & cheapest)
   - Anthropic's Claude (`claude-sonnet-4-5-20250929`)
   - OpenAI's GPT (`gpt-5.2`)
-- 📝 Follows conventional commit format (`type(scope): subject`)
+- 📝 Follows conventional commit format (`type: subject`)
+- 🧠 Rich context: README, branch name, recent commits, full diff analysis
 - 💡 Contextual hints to guide message generation
 - ✅ Interactive commit prompt by default
 - 📋 Copy to clipboard with `-c/--copy`
-- 🧠 Configurable reasoning depth across all providers (none/minimal/low/high)
+- ⚡ Configurable reasoning depth (none/minimal/low/high)
 - 💰 Shows estimated token usage, time, and cost
 
 ## Installation
@@ -105,7 +106,7 @@ Options:
       --show-raw-diff
           Show the raw git diff that will be sent to the AI model
       --context-lines <CONTEXT_LINES>
-          Number of context lines to show in the git diff [default: 8]
+          Number of context lines to show in the git diff [default: 20]
       --model <MODEL>
           Use a specific AI model (defaults to gemini-3-flash-preview,
           claude-sonnet-4-5-20250929, or gpt-5.2 depending on provider)
@@ -116,9 +117,9 @@ Options:
       --hint <HINT>
           Add a hint to guide the AI in generating the commit message
       --max-lines-per-file <MAX_LINES_PER_FILE>
-          Number of maximum lines to show per file in the git diff [default: 300]
+          Number of maximum lines to show per file in the git diff [default: 2000]
       --max-line-width <MAX_LINE_WIDTH>
-          Maximum line width for diffs [default: 300]
+          Maximum line width for diffs [default: 500]
       --template <TEMPLATE>
           Use a specific template for the commit message
       --list-templates
@@ -132,7 +133,7 @@ Options:
       --no-recent-commits
           Disable including recent commits for context
       --recent-commits-count <RECENT_COMMITS_COUNT>
-          Number of recent commits to include for context [default: 5]
+          Number of recent commits to include for context [default: 10]
       --init-config
           Create a new configuration file
       --config-path <CONFIG_PATH>
@@ -186,12 +187,11 @@ git commit -F <(cmt -m)
 
 ## How It Works
 
-1. `cmt` analyzes your staged git changes
-2. Pre-analysis suggests commit type and scope from file paths
-3. Sends the diff to the AI with few-shot examples and anti-patterns
-4. Post-processing validates subject length, formatting, and deduplication
-5. Shows stats (tokens, time, estimated cost)
-6. You review and confirm (or regenerate with a hint)
+1. `cmt` gathers rich context: README excerpt, branch name, recent commits
+2. Analyzes staged changes to suggest commit type
+3. Sends full context + diff to the AI (optimized for Gemini's 1M token context)
+4. Shows stats (tokens, time, estimated cost)
+5. You review and confirm (or regenerate with a hint)
 
 Example output:
 ```
@@ -201,7 +201,7 @@ Staged: 3 files +150 -42
   Cargo.toml    +20  -10
 
 Commit message:
-feat(api): add user authentication endpoint
+feat: add user authentication endpoint
 
 - Implement JWT token validation
 - Add password hashing with bcrypt
@@ -215,11 +215,13 @@ feat(api): add user authentication endpoint
 ## Commit Message Format
 
 ```
-type(scope): subject
+type: subject
 
 - Detail about change 1
 - Detail about change 2
 ```
+
+Scope (`type(scope): subject`) is only used for monorepos or large codebases with distinct modules.
 
 Types: `feat`, `fix`, `docs`, `style`, `refactor`, `test`, `chore`, `perf`, `build`, `ci`
 
@@ -239,21 +241,6 @@ cmt --create-template my-template --template-content "{{type}}: {{subject}}"
 Templates are stored in `~/.config/cmt/templates/` as `.hbs` files.
 
 Available variables: `{{type}}`, `{{subject}}`, `{{details}}`, `{{scope}}`, `{{breaking}}`, `{{issues}}`
-
-## Shell Aliases
-
-Add to your `~/.zshrc` or `~/.bashrc`:
-
-```bash
-# Quick commit with AI message (still prompts for confirmation)
-alias c='cmt'
-
-# Commit without confirmation
-alias cy='cmt -y'
-
-# Just show the message
-alias cm='cmt --no-commit'
-```
 
 ## License
 

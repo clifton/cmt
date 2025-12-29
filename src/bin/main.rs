@@ -3,7 +3,9 @@ use cmt::ai_mod::create_default_registry;
 use cmt::config_mod::{file as config_file, Config};
 use cmt::pricing::{self, PricingCache};
 use cmt::template_mod::TemplateManager;
-use cmt::{analyze_diff, generate_commit_message, Args, Spinner};
+use cmt::{
+    analyze_diff, generate_commit_message, get_current_branch, get_readme_excerpt, Args, Spinner,
+};
 use colored::*;
 use dotenv::dotenv;
 use git2::Repository;
@@ -232,20 +234,14 @@ fn main() {
     };
     let staged_changes = staged.diff_text.clone();
 
-    // Determine diff size for adaptive behaviors
-    let is_large_diff = staged.stats.files_changed > 40
-        || (staged.stats.insertions + staged.stats.deletions) > 4000;
+    // Determine diff size for adaptive behaviors (very high thresholds - Gemini supports 1M tokens)
+    let is_very_large_diff = staged.stats.files_changed > 150
+        || (staged.stats.insertions + staged.stats.deletions) > 50000;
 
-    // Get recent commits if enabled (adaptive gating and count capping on large diffs)
-    let include_recent = !args.no_recent_commits && !is_large_diff;
+    // Get recent commits - only skip for extremely large diffs
+    let include_recent = !args.no_recent_commits && !is_very_large_diff;
     let effective_recent_count = if include_recent {
-        if staged.stats.files_changed > 25
-            || (staged.stats.insertions + staged.stats.deletions) > 2000
-        {
-            args.recent_commits_count.min(3)
-        } else {
-            args.recent_commits_count
-        }
+        args.recent_commits_count // Always use full count - we have the token budget
     } else {
         0
     };
@@ -253,7 +249,7 @@ fn main() {
     if !args.no_recent_commits && !include_recent {
         eprintln!(
             "{}",
-            "Skipping recent commits for this large diff to reduce prompt size.".yellow()
+            "Skipping recent commits for this extremely large diff.".yellow()
         );
     }
 
@@ -282,6 +278,12 @@ fn main() {
             None
         }
     };
+
+    // Get current branch name for context
+    let branch_name = get_current_branch(&repo);
+
+    // Get README excerpt for project context (first 50 lines)
+    let readme_excerpt = get_readme_excerpt(&repo, 50);
 
     // Show raw diff if requested
     if args.show_raw_diff {
@@ -317,23 +319,29 @@ fn main() {
     };
 
     let start_time = Instant::now();
-    let commit_message =
-        match generate_commit_message(&args, &staged_changes, &recent_commits, analysis.as_ref()) {
-            Ok(message) => {
-                if let Some(s) = &spinner {
-                    s.finish_and_clear();
-                }
-                message
+    let commit_message = match generate_commit_message(
+        &args,
+        &staged_changes,
+        &recent_commits,
+        analysis.as_ref(),
+        branch_name.as_deref(),
+        readme_excerpt.as_deref(),
+    ) {
+        Ok(message) => {
+            if let Some(s) = &spinner {
+                s.finish_and_clear();
             }
-            Err(e) => {
-                if let Some(s) = &spinner {
-                    s.finish_and_clear();
-                }
-                eprintln!("{}", "Error generating commit message:".red().bold());
-                eprintln!("{}", e);
-                process::exit(1);
+            message
+        }
+        Err(e) => {
+            if let Some(s) = &spinner {
+                s.finish_and_clear();
             }
-        };
+            eprintln!("{}", "Error generating commit message:".red().bold());
+            eprintln!("{}", e);
+            process::exit(1);
+        }
+    };
     let elapsed = start_time.elapsed();
 
     // Copy to clipboard if requested
@@ -462,6 +470,8 @@ fn main() {
                                     &staged_changes,
                                     &recent_commits,
                                     analysis.as_ref(),
+                                    branch_name.as_deref(),
+                                    readme_excerpt.as_deref(),
                                 ) {
                                     Ok(new_message) => {
                                         spinner.finish_and_clear();

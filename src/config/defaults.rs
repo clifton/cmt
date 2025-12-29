@@ -4,16 +4,16 @@
 pub const MESSAGE_ONLY: bool = false;
 pub const NO_DIFF_STATS: bool = false;
 pub const SHOW_RAW_DIFF: bool = false;
-pub const CONTEXT_LINES: u32 = 12;
-pub const MAX_LINES_PER_FILE: usize = 500;
-pub const MAX_LINE_WIDTH: usize = 300;
+pub const CONTEXT_LINES: u32 = 20; // Full function context - Gemini Flash supports 1M tokens
+pub const MAX_LINES_PER_FILE: usize = 2000; // Allow large files - we have token budget
+pub const MAX_LINE_WIDTH: usize = 500; // Allow wider lines for better context
 
 // AI provider defaults
 pub const DEFAULT_PROVIDER: &str = "gemini";
 
 // Git defaults
 pub const INCLUDE_RECENT_COMMITS: bool = true;
-pub const RECENT_COMMITS_COUNT: usize = 5;
+pub const RECENT_COMMITS_COUNT: usize = 10; // More history for better context
 
 // File paths
 pub const DEFAULT_CONFIG_FILENAME: &str = ".cmt.toml";

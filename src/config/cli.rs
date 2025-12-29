@@ -17,7 +17,7 @@ pub struct Args {
     pub show_raw_diff: bool,
 
     /// Number of context lines to show in the git diff
-    #[arg(long, default_value_t = 8)]
+    #[arg(long, default_value_t = 20)]
     pub context_lines: u32,
 
     /// Use a specific AI model (defaults to gemini-3-flash-preview, claude-sonnet-4-5-20250929, or gpt-5.2 depending on provider)
@@ -37,11 +37,11 @@ pub struct Args {
     pub hint: Option<String>,
 
     /// Number of maximum lines to show per file in the git diff
-    #[arg(long, default_value_t = 300)]
+    #[arg(long, default_value_t = 2000)]
     pub max_lines_per_file: usize,
 
     /// Maximum line width for diffs
-    #[arg(long, default_value_t = 300)]
+    #[arg(long, default_value_t = 500)]
     pub max_line_width: usize,
 
     /// Use a specific template for the commit message
@@ -69,7 +69,7 @@ pub struct Args {
     pub no_recent_commits: bool,
 
     /// Number of recent commits to include for context
-    #[arg(long, default_value_t = 5)]
+    #[arg(long, default_value_t = 10)]
     pub recent_commits_count: usize,
 
     /// Create a new configuration file
@@ -117,12 +117,12 @@ mod tests {
         assert!(!args.message_only);
         assert!(!args.no_diff_stats);
         assert!(!args.show_raw_diff);
-        assert_eq!(args.context_lines, 8);
+        assert_eq!(args.context_lines, 20);
         assert!(args.model.is_none());
         assert!(args.temperature.is_none());
         assert!(args.hint.is_none());
         assert!(!args.no_recent_commits);
-        assert_eq!(args.recent_commits_count, 5);
+        assert_eq!(args.recent_commits_count, 10);
         assert!(!args.init_config);
         assert!(args.config_path.is_none());
         assert_eq!(args.provider, "gemini");

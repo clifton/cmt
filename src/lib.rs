@@ -43,7 +43,8 @@ fn validate_commit_data(mut data: CommitTemplate) -> CommitTemplate {
     // Ensure subject starts with lowercase
     if let Some(first_char) = data.subject.chars().next() {
         if first_char.is_uppercase() {
-            data.subject = first_char.to_lowercase().to_string() + &data.subject[first_char.len_utf8()..];
+            data.subject =
+                first_char.to_lowercase().to_string() + &data.subject[first_char.len_utf8()..];
         }
     }
 
@@ -69,7 +70,8 @@ fn validate_commit_data(mut data: CommitTemplate) -> CommitTemplate {
             .filter(|line| {
                 let line_lower = line.to_lowercase();
                 // Keep line if it's not too similar to subject
-                !line_lower.contains(&subject_lower) && !subject_lower.contains(line_lower.trim_start_matches("- "))
+                !line_lower.contains(&subject_lower)
+                    && !subject_lower.contains(line_lower.trim_start_matches("- "))
             })
             .collect();
 
@@ -150,39 +152,38 @@ pub fn generate_commit_message(
         &prompt,
         thinking_level,
     ) {
-            Ok(data) => data,
-            Err(err) => {
-                if let Some(ai::AiError::InvalidModel { model }) = err.downcast_ref::<ai::AiError>()
-                {
-                    // Try to fetch available models
-                    match provider.fetch_available_models() {
-                        Ok(models) if !models.is_empty() => {
-                            // Sort models alphabetically and format as a bulleted list for better readability
-                            let mut sorted_models = models.clone();
-                            sorted_models.sort();
+        Ok(data) => data,
+        Err(err) => {
+            if let Some(ai::AiError::InvalidModel { model }) = err.downcast_ref::<ai::AiError>() {
+                // Try to fetch available models
+                match provider.fetch_available_models() {
+                    Ok(models) if !models.is_empty() => {
+                        // Sort models alphabetically and format as a bulleted list for better readability
+                        let mut sorted_models = models.clone();
+                        sorted_models.sort();
 
-                            println!("Available models: {}", sorted_models.join(", "));
+                        println!("Available models: {}", sorted_models.join(", "));
 
-                            return Err(format!(
-                                "Invalid model: {} for provider: {}\nAvailable models:{}",
-                                model,
-                                provider_name,
-                                sorted_models
-                                    .iter()
-                                    .map(|model| format!("\n  • {}", model))
-                                    .collect::<Vec<String>>()
-                                    .join("")
-                            )
-                            .into());
-                        }
-                        _ => {} // If we can't fetch models, just return the original error
+                        return Err(format!(
+                            "Invalid model: {} for provider: {}\nAvailable models:{}",
+                            model,
+                            provider_name,
+                            sorted_models
+                                .iter()
+                                .map(|model| format!("\n  • {}", model))
+                                .collect::<Vec<String>>()
+                                .join("")
+                        )
+                        .into());
                     }
+                    _ => {} // If we can't fetch models, just return the original error
                 }
-
-                // Return the original error
-                return Err(err);
             }
-        };
+
+            // Return the original error
+            return Err(err);
+        }
+    };
 
     // Validate and fix the commit data
     let commit_data = validate_commit_data(commit_data);

@@ -16,8 +16,9 @@ use std::sync::Arc;
 // - High enough for natural language variety in commit messages
 pub const DEFAULT_TEMPERATURE: f32 = 0.3;
 
-// Max output tokens - 16k is generous for commit messages
-pub const DEFAULT_MAX_TOKENS: u32 = 16384;
+// Max output tokens - 4096 provides headroom for JSON structure overhead
+// while still being much smaller than the previous 16k
+pub const DEFAULT_MAX_TOKENS: u32 = 4096;
 
 lazy_static! {
     /// The JSON schema for CommitTemplate, generated once and reused

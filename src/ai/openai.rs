@@ -121,9 +121,35 @@ impl AiProvider for OpenAiProvider {
                 }));
             }
 
+            // Provide clearer error messages for common HTTP errors
+            let error_msg = match status.as_u16() {
+                520..=524 => {
+                    format!(
+                        "Cloudflare/API gateway error (status {}): {}. This is usually transient - please try again.",
+                        status.as_u16(),
+                        error_text
+                    )
+                }
+                429 => {
+                    format!(
+                        "Rate limit exceeded (status {}): {}. Please wait a moment and try again.",
+                        status.as_u16(),
+                        error_text
+                    )
+                }
+                503 => {
+                    format!(
+                        "Service unavailable (status {}): {}. The API may be temporarily down - please try again.",
+                        status.as_u16(),
+                        error_text
+                    )
+                }
+                _ => format!("API error (status {}): {}", status.as_u16(), error_text),
+            };
+
             return Err(Box::new(AiError::ApiError {
                 code: status.as_u16(),
-                message: format!("API error (status {}): {}", status, error_text),
+                message: error_msg,
             }));
         }
 

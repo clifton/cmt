@@ -2,7 +2,7 @@ use arboard::Clipboard;
 use cmt::ai_mod::create_default_registry;
 use cmt::config_mod::{file as config_file, Config};
 use cmt::template_mod::TemplateManager;
-use cmt::{analyze_diff, generate_commit_message, git_staged_changes, Args, Spinner};
+use cmt::{analyze_diff, generate_commit_message, Args, Spinner};
 use colored::*;
 use dotenv::dotenv;
 use git2::Repository;
@@ -211,8 +211,8 @@ fn main() {
         }
     };
 
-    // Get staged changes
-    let staged_changes = match cmt::get_staged_changes(
+    // Get staged changes (includes both diff text and stats in one pass)
+    let staged = match cmt::get_staged_changes(
         &repo,
         args.context_lines,
         args.max_lines_per_file,
@@ -225,6 +225,7 @@ fn main() {
             process::exit(1);
         }
     };
+    let staged_changes = staged.diff_text.clone();
 
     // Get recent commits if enabled
     let recent_commits = if args.include_recent_commits {
@@ -273,9 +274,7 @@ fn main() {
 
     // Show diff stats before sending to LLM (unless message-only mode)
     if !args.message_only && !args.no_diff_stats {
-        if let Err(e) = git_staged_changes(&repo) {
-            eprintln!("{} {}", "Warning:".yellow(), e);
-        }
+        staged.stats.print();
     }
 
     // Generate commit message with spinner (only in interactive mode)

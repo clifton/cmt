@@ -1,6 +1,82 @@
 use colored::*;
 use git2::{Error as GitError, Repository, Sort};
 
+/// Stats about staged changes for display
+#[derive(Debug, Clone)]
+pub struct DiffStats {
+    pub files_changed: usize,
+    pub insertions: usize,
+    pub deletions: usize,
+    pub file_changes: Vec<(String, usize, usize)>, // (filename, adds, dels)
+    pub has_unstaged: bool,
+}
+
+impl DiffStats {
+    /// Print the stats in a compact format
+    pub fn print(&self) {
+        println!();
+
+        // Warn about unstaged changes prominently at the top
+        if self.has_unstaged {
+            println!(
+                "{}",
+                "⚠  You have unstaged changes that won't be included in this commit"
+                    .yellow()
+                    .bold()
+            );
+            println!();
+        }
+
+        // Print compact header
+        print!(
+            "{} {} ",
+            "Staged:".blue(),
+            format!(
+                "{} file{}",
+                self.files_changed,
+                if self.files_changed == 1 { "" } else { "s" }
+            )
+            .white()
+        );
+        if self.insertions > 0 {
+            print!("{} ", format!("+{}", self.insertions).green());
+        }
+        if self.deletions > 0 {
+            print!("{}", format!("-{}", self.deletions).red());
+        }
+        println!();
+
+        // Print file list (compact)
+        let max_len = self
+            .file_changes
+            .iter()
+            .map(|(f, _, _)| f.len())
+            .max()
+            .unwrap_or(0);
+
+        for (file, adds, dels) in &self.file_changes {
+            print!("  {:<width$}", file.white(), width = max_len + 2);
+            if *adds > 0 {
+                print!("{}", format!("+{:<3}", adds).green());
+            } else {
+                print!("    ");
+            }
+            if *dels > 0 {
+                print!("{}", format!("-{}", dels).red());
+            }
+            println!();
+        }
+        println!(); // Space before next section
+    }
+}
+
+/// Result of getting staged changes - includes both diff text and stats
+#[derive(Debug)]
+pub struct StagedChanges {
+    pub diff_text: String,
+    pub stats: DiffStats,
+}
+
 pub fn get_recent_commits(repo: &Repository, count: usize) -> Result<String, GitError> {
     let mut revwalk = repo.revwalk()?;
     revwalk.set_sorting(Sort::TIME)?;
@@ -28,7 +104,7 @@ pub fn get_staged_changes(
     context_lines: u32,
     max_lines_per_file: usize,
     max_line_width: usize,
-) -> Result<String, GitError> {
+) -> Result<StagedChanges, GitError> {
     let mut opts = git2::DiffOptions::new();
     opts.context_lines(context_lines);
 
@@ -47,6 +123,39 @@ pub fn get_staged_changes(
         .diff_tree_to_index(Some(&tree), None, Some(&mut opts))
         .map_err(|e| GitError::from_str(&format!("Failed to get repository diff: {}", e)))?;
 
+    // Get stats in the same pass
+    let git_stats = diff.stats()?;
+    let mut format_opts = git2::DiffStatsFormat::empty();
+    format_opts.insert(git2::DiffStatsFormat::FULL);
+    let changes_buf = git_stats.to_buf(format_opts, 80)?;
+    let changes_str = String::from_utf8_lossy(&changes_buf);
+
+    let file_changes: Vec<(String, usize, usize)> = changes_str
+        .lines()
+        .filter(|line| line.contains('|'))
+        .filter_map(|line| {
+            let parts: Vec<&str> = line.splitn(2, '|').collect();
+            if parts.len() == 2 {
+                let file = parts[0].trim().to_string();
+                let changes = parts[1].trim();
+                let adds = changes.chars().filter(|&c| c == '+').count();
+                let dels = changes.chars().filter(|&c| c == '-').count();
+                Some((file, adds, dels))
+            } else {
+                None
+            }
+        })
+        .collect();
+
+    let stats = DiffStats {
+        files_changed: git_stats.files_changed(),
+        insertions: git_stats.insertions(),
+        deletions: git_stats.deletions(),
+        file_changes,
+        has_unstaged: has_unstaged_changes(repo).unwrap_or(false),
+    };
+
+    // Build diff text
     let mut diff_str = String::new();
     let mut line_count = 0;
     let mut truncated = false;
@@ -90,7 +199,10 @@ pub fn get_staged_changes(
     if diff_str.is_empty() {
         Err(GitError::from_str("No changes have been staged for commit"))
     } else {
-        Ok(diff_str)
+        Ok(StagedChanges {
+            diff_text: diff_str,
+            stats,
+        })
     }
 }
 
@@ -99,106 +211,6 @@ fn has_unstaged_changes(repo: &Repository) -> Result<bool, GitError> {
     Ok(diff.stats()?.files_changed() > 0)
 }
 
-pub fn git_staged_changes(repo: &Repository) -> Result<(), Box<dyn std::error::Error>> {
-    let mut opts = git2::DiffOptions::new();
-    let tree = match repo.head().and_then(|head| head.peel_to_tree()) {
-        Ok(tree) => tree,
-        Err(_) => {
-            // If there's no HEAD (new repo), use an empty tree
-            repo.treebuilder(None)
-                .and_then(|builder| builder.write())
-                .and_then(|oid| repo.find_tree(oid))
-                .map_err(|e| GitError::from_str(&format!("Failed to create empty tree: {}", e)))?
-        }
-    };
-
-    let diff = repo
-        .diff_tree_to_index(Some(&tree), None, Some(&mut opts))
-        .map_err(|e| GitError::from_str(&format!("Failed to get repository diff: {}", e)))?;
-
-    let stats = diff.stats()?;
-    let insertions = stats.insertions();
-    let deletions = stats.deletions();
-    let files_changed = stats.files_changed();
-
-    // Collect per-file stats
-    let mut format_opts = git2::DiffStatsFormat::empty();
-    format_opts.insert(git2::DiffStatsFormat::FULL);
-    let changes_buf = stats.to_buf(format_opts, 80)?;
-    let changes_str = String::from_utf8_lossy(&changes_buf);
-
-    // Parse file changes into a clean format
-    let file_changes: Vec<(String, usize, usize)> = changes_str
-        .lines()
-        .filter(|line| line.contains('|'))
-        .filter_map(|line| {
-            let parts: Vec<&str> = line.splitn(2, '|').collect();
-            if parts.len() == 2 {
-                let file = parts[0].trim().to_string();
-                let changes = parts[1].trim();
-                let adds = changes.chars().filter(|&c| c == '+').count();
-                let dels = changes.chars().filter(|&c| c == '-').count();
-                Some((file, adds, dels))
-            } else {
-                None
-            }
-        })
-        .collect();
-
-    // Warn about unstaged changes prominently at the top
-    println!();
-    if has_unstaged_changes(repo)? {
-        println!(
-            "{}",
-            "⚠  You have unstaged changes that won't be included in this commit"
-                .yellow()
-                .bold()
-        );
-        println!();
-    }
-
-    // Print compact header
-    print!(
-        "{} {} ",
-        "Staged:".blue(),
-        format!(
-            "{} file{}",
-            files_changed,
-            if files_changed == 1 { "" } else { "s" }
-        )
-        .white()
-    );
-    if insertions > 0 {
-        print!("{} ", format!("+{}", insertions).green());
-    }
-    if deletions > 0 {
-        print!("{}", format!("-{}", deletions).red());
-    }
-    println!();
-
-    // Print file list (compact)
-    let max_len = file_changes
-        .iter()
-        .map(|(f, _, _)| f.len())
-        .max()
-        .unwrap_or(0);
-
-    for (file, adds, dels) in &file_changes {
-        print!("  {:<width$}", file.white(), width = max_len + 2);
-        if *adds > 0 {
-            print!("{}", format!("+{:<3}", adds).green());
-        } else {
-            print!("    ");
-        }
-        if *dels > 0 {
-            print!("{}", format!("-{}", dels).red());
-        }
-        println!();
-    }
-    println!(); // Space before next section
-
-    Ok(())
-}
 
 #[cfg(test)]
 mod tests {
@@ -263,8 +275,8 @@ mod tests {
         // Create and stage a new file
         create_and_stage_file(&repo, "test.txt", "Hello, World!");
 
-        let changes = get_staged_changes(&repo, 0, 100, 300).unwrap();
-        assert!(changes.contains("Hello, World!"));
+        let staged = get_staged_changes(&repo, 0, 100, 300).unwrap();
+        assert!(staged.diff_text.contains("Hello, World!"));
     }
 
     #[test]
@@ -278,9 +290,9 @@ mod tests {
         // Modify and stage the file
         create_and_stage_file(&repo, "test.txt", "Modified content");
 
-        let changes = get_staged_changes(&repo, 0, 100, 300).unwrap();
-        assert!(changes.contains("Initial content"));
-        assert!(changes.contains("Modified content"));
+        let staged = get_staged_changes(&repo, 0, 100, 300).unwrap();
+        assert!(staged.diff_text.contains("Initial content"));
+        assert!(staged.diff_text.contains("Modified content"));
     }
 
     #[test]
@@ -319,9 +331,9 @@ mod tests {
         // Create another staged file
         create_and_stage_file(&repo, "new-staged.txt", "New staged content");
 
-        // Should succeed and include warning about unstaged changes
-        let result = git_staged_changes(&repo);
-        assert!(result.is_ok());
+        // Should succeed and detect unstaged changes
+        let result = get_staged_changes(&repo, 3, 100, 300).unwrap();
+        assert!(result.stats.has_unstaged);
     }
 
     #[test]
@@ -334,13 +346,13 @@ mod tests {
         // Create and stage a regular file
         create_and_stage_file(&repo, "test.txt", "This is a regular file.");
 
-        let changes = get_staged_changes(&repo, 0, 100, 300).unwrap();
+        let staged = get_staged_changes(&repo, 0, 100, 300).unwrap();
 
         // Assert that the .lock file content is not in the diff
-        assert!(!changes.contains("This is a lock file."));
+        assert!(!staged.diff_text.contains("This is a lock file."));
 
         // Assert that the regular file content is in the diff
-        assert!(changes.contains("This is a regular file."));
+        assert!(staged.diff_text.contains("This is a regular file."));
     }
 
     #[test]
@@ -356,16 +368,22 @@ mod tests {
 
         // Set max_lines_per_file to 10 for testing
         let max_lines_per_file = 10;
-        let changes = get_staged_changes(&repo, 0, max_lines_per_file, 300).unwrap();
+        let staged = get_staged_changes(&repo, 0, max_lines_per_file, 300).unwrap();
 
         // Assert that the diff output does not exceed the max_lines_per_file limit
         // Allow extra lines for headers and metadata
         // let allowed_extra_lines = 6; // Adjust this number based on typical header lines
 
         // Assert that the truncation note is included
-        assert!(changes.contains("[Note: Diff output truncated to max lines per file.]"));
-        assert!(changes.contains(&format!("+Line {}", max_lines_per_file - 1)));
-        assert!(!changes.contains(&format!("+Line {}", max_lines_per_file)));
+        assert!(staged
+            .diff_text
+            .contains("[Note: Diff output truncated to max lines per file.]"));
+        assert!(staged
+            .diff_text
+            .contains(&format!("+Line {}", max_lines_per_file - 1)));
+        assert!(!staged
+            .diff_text
+            .contains(&format!("+Line {}", max_lines_per_file)));
     }
 
     #[test]
@@ -378,10 +396,10 @@ mod tests {
 
         // Set max_line_width to 100 for testing
         let max_line_width = 100;
-        let changes = get_staged_changes(&repo, 0, 100, max_line_width).unwrap();
+        let staged = get_staged_changes(&repo, 0, 100, max_line_width).unwrap();
 
         // Assert that the line is truncated to max_line_width
-        assert!(changes.contains(&long_line[..max_line_width]));
-        assert!(changes.contains("..."));
+        assert!(staged.diff_text.contains(&long_line[..max_line_width]));
+        assert!(staged.diff_text.contains("..."));
     }
 }

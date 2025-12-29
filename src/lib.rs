@@ -1,5 +1,5 @@
 pub use crate::config::cli::Args;
-pub use crate::git::{get_recent_commits, get_staged_changes, git_staged_changes};
+pub use crate::git::{get_recent_commits, get_staged_changes, DiffStats, StagedChanges};
 
 mod ai;
 mod analysis;

@@ -13,6 +13,78 @@ pub use progress::Spinner;
 
 pub use analysis::{analyze_diff, DiffAnalysis};
 
+use templates::CommitTemplate;
+
+/// Validate and fix commit data to ensure quality output
+fn validate_commit_data(mut data: CommitTemplate) -> CommitTemplate {
+    // Calculate max subject length based on type and scope
+    // Format: "type(scope): subject" or "type: subject"
+    let type_str = format!("{:?}", data.r#type).to_lowercase();
+    let prefix_len = if let Some(ref scope) = data.scope {
+        type_str.len() + scope.len() + 4 // "type(scope): "
+    } else {
+        type_str.len() + 2 // "type: "
+    };
+    let max_subject_len = 50_usize.saturating_sub(prefix_len);
+
+    // Truncate subject if too long
+    if data.subject.len() > max_subject_len {
+        // Try to truncate at a word boundary
+        let truncated: String = data
+            .subject
+            .chars()
+            .take(max_subject_len.saturating_sub(3))
+            .collect();
+        if let Some(last_space) = truncated.rfind(' ') {
+            data.subject = format!("{}...", &truncated[..last_space]);
+        } else {
+            data.subject = format!("{}...", truncated);
+        }
+    }
+
+    // Ensure subject starts with lowercase
+    if let Some(first_char) = data.subject.chars().next() {
+        if first_char.is_uppercase() {
+            data.subject = first_char.to_lowercase().to_string() + &data.subject[first_char.len_utf8()..];
+        }
+    }
+
+    // Remove trailing period from subject
+    if data.subject.ends_with('.') {
+        data.subject.pop();
+    }
+
+    // Validate scope (lowercase, no spaces)
+    if let Some(ref mut scope) = data.scope {
+        *scope = scope.to_lowercase().replace(' ', "-");
+        // Remove scope if it's too generic or empty
+        if scope.is_empty() || scope == "general" || scope == "misc" || scope == "other" {
+            data.scope = None;
+        }
+    }
+
+    // Clean up details - remove bullets that duplicate subject
+    if let Some(ref mut details) = data.details {
+        let subject_lower = data.subject.to_lowercase();
+        let lines: Vec<&str> = details
+            .lines()
+            .filter(|line| {
+                let line_lower = line.to_lowercase();
+                // Keep line if it's not too similar to subject
+                !line_lower.contains(&subject_lower) && !subject_lower.contains(line_lower.trim_start_matches("- "))
+            })
+            .collect();
+        
+        if lines.is_empty() {
+            data.details = None;
+        } else {
+            *details = lines.join("\n");
+        }
+    }
+
+    data
+}
+
 pub fn generate_commit_message(
     args: &Args,
     git_diff: &str,
@@ -105,6 +177,9 @@ pub fn generate_commit_message(
                 return Err(err);
             }
         };
+
+    // Validate and fix the commit data
+    let commit_data = validate_commit_data(commit_data);
 
     // Render the template
     let rendered = template_manager.render(&template_name, &commit_data)?;

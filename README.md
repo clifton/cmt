@@ -175,9 +175,10 @@ git commit -F <(cmt -m)
 ## How It Works
 
 1. `cmt` analyzes your staged git changes
-2. Sends the diff to the AI model with context about conventional commits
-3. AI generates a commit message following the format: `type(scope): subject`
-4. You review and confirm (or regenerate with a hint)
+2. Pre-analysis suggests commit type and scope from file paths
+3. Sends the diff to the AI with few-shot examples and anti-patterns
+4. Post-processing validates subject length, formatting, and deduplication
+5. You review and confirm (or regenerate with a hint)
 
 ## Commit Message Format
 

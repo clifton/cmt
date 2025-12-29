@@ -20,7 +20,7 @@ pub struct Args {
     #[arg(long, default_value_t = 12)]
     pub context_lines: u32,
 
-    /// Use a specific AI model (defaults to claude-3-7-sonnet-latest or gpt-4o depending on provider)
+    /// Use a specific AI model (defaults to claude-sonnet-4-5-20250929 or gpt-5.2 depending on provider)
     #[arg(long)]
     pub model: Option<String>,
 
@@ -83,6 +83,18 @@ pub struct Args {
     /// Use a specific provider (claude, openai, etc.)
     #[arg(long, default_value = "claude")]
     pub provider: String,
+
+    /// Copy the generated commit message to clipboard
+    #[arg(short, long)]
+    pub copy: bool,
+
+    /// Commit directly with the generated message
+    #[arg(long)]
+    pub commit: bool,
+
+    /// Skip confirmation when using --commit
+    #[arg(long, short = 'y')]
+    pub yes: bool,
 }
 
 impl Args {
@@ -115,6 +127,34 @@ mod tests {
         assert!(args.create_template.is_none());
         assert!(args.template_content.is_none());
         assert!(args.show_template.is_none());
+        assert!(!args.copy);
+    }
+
+    #[test]
+    fn test_copy_flag() {
+        let args = Args::new_from(["cmt", "--copy"].iter().map(ToString::to_string));
+        assert!(args.copy);
+
+        let args = Args::new_from(["cmt", "-c"].iter().map(ToString::to_string));
+        assert!(args.copy);
+    }
+
+    #[test]
+    fn test_commit_flag() {
+        let args = Args::new_from(["cmt", "--commit"].iter().map(ToString::to_string));
+        assert!(args.commit);
+        assert!(!args.yes);
+    }
+
+    #[test]
+    fn test_commit_with_yes_flag() {
+        let args = Args::new_from(["cmt", "--commit", "--yes"].iter().map(ToString::to_string));
+        assert!(args.commit);
+        assert!(args.yes);
+
+        let args = Args::new_from(["cmt", "--commit", "-y"].iter().map(ToString::to_string));
+        assert!(args.commit);
+        assert!(args.yes);
     }
 
     #[test]
@@ -149,7 +189,7 @@ mod tests {
 
     #[test]
     fn test_model_option() {
-        let model = "gpt-4";
+        let model = "gpt-5.2";
         let args = Args::new_from(["cmt", "--model", model].iter().map(ToString::to_string));
         assert_eq!(args.model, Some(model.to_string()));
     }
@@ -189,7 +229,7 @@ mod tests {
                 "--provider",
                 "openai",
                 "--model",
-                "gpt-4o",
+                "gpt-5.2",
                 "--temperature",
                 "0.8",
                 "--hint",
@@ -201,7 +241,7 @@ mod tests {
 
         assert!(args.message_only);
         assert!(args.no_diff_stats);
-        assert_eq!(args.model, Some("gpt-4o".to_string()));
+        assert_eq!(args.model, Some("gpt-5.2".to_string()));
         assert_eq!(args.temperature, Some(0.8));
         assert_eq!(args.hint, Some("Fix the login bug".to_string()));
     }

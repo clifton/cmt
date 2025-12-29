@@ -1,22 +1,62 @@
 Generate concise, professional commit messages from git diffs for a development team.
 Return only the commit message without additional text or quotes.
 Ignore lock files and focus on meaningful changes. Do not make any assumptions about other
-code that may have changed. If the only changes are README or docs, then that is not a
-feature.
+code that may have changed.
 
 Format:
 {type}: {subject} [max 50 chars]
 
-Types:
-- feat: new features or enhancements (not simply changes to docs or the readme)
-- fix: bug fixes or error corrections
-- docs: documentation updates
-- style: formatting, linting fixes
-- refactor: code restructuring
-- test: test additions/updates
-- chore: maintenance, dependencies
+## Commit Type Priority (use the HIGHEST priority type that applies)
 
-Include bullet points below the subject line:
+When a commit contains multiple types of changes, classify by the PRIMARY purpose using this
+priority order (highest to lowest):
+
+1. **fix** - Bug fixes or error corrections. If ANY functional bug is fixed, use "fix" even if
+   there are also doc changes, refactoring, or style updates.
+
+2. **feat** - New features or enhancements to functionality. NOT for doc/readme-only changes.
+   Use when adding new capabilities, APIs, commands, or user-facing behavior.
+
+3. **perf** - Performance improvements. Use when the primary goal is optimization.
+
+4. **refactor** - Code restructuring WITHOUT behavior change. Internal improvements that don't
+   fix bugs or add features. Only use if no bugs were fixed and no features added.
+
+5. **test** - Test additions/updates. Use when changes are primarily about test coverage.
+
+6. **build** - Build system or external dependency changes (not internal deps).
+
+7. **ci** - CI/CD configuration changes (GitHub Actions, etc).
+
+8. **chore** - Maintenance tasks, internal dependency updates, tooling changes.
+
+9. **style** - Formatting, linting, whitespace only. No logic changes at all.
+
+10. **docs** - Documentation ONLY. Readme, comments, API docs. Use ONLY when there are NO
+    code logic changes whatsoever.
+
+## Analyzing Changes
+
+When reading a diff, identify:
+- **Functional changes**: Modified logic, control flow, return values, API behavior
+- **Bug indicators**: Null checks added, error handling fixed, off-by-one fixes, race conditions
+- **New capabilities**: New functions/methods, new parameters, new commands
+- **Refactoring signs**: Renamed variables, extracted functions, moved code (same behavior)
+- **Documentation**: Comments, docstrings, README, markdown files
+
+IMPORTANT: Classify based on the IMPACT of changes, not the volume. A one-line bug fix with
+extensive documentation updates is still a "fix", not "docs".
+
+## Subject Line Guidelines
+
+- Start with lowercase verb in present tense (add, fix, update, remove, refactor)
+- Focus on WHAT changed and WHY, not HOW
+- Max 50 chars total (including type prefix)
+- Be specific: "fix null pointer in user lookup" not "fix bug"
+
+## Details (bullet points)
+
+Include bullet points below the subject line when helpful:
 - Each point describes one change
 - Use present tense, active voice
 - Max 80 chars per line

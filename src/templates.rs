@@ -45,43 +45,54 @@ impl From<handlebars::RenderError> for TemplateError {
 }
 
 // Enum for commit types with lowercase serialization
+// Priority order (highest to lowest): fix > feat > perf > refactor > test > build > ci > chore > style > docs
 #[derive(Debug, Serialize, Deserialize, PartialEq, JsonSchema)]
 #[serde(rename_all = "lowercase")]
-#[schemars(description = "The type of a commit message. Choose based on the nature of the change.")]
+#[schemars(
+    description = "The type of a commit message. Choose based on the PRIMARY purpose using priority: fix > feat > perf > refactor > test > build > ci > chore > style > docs. If a commit fixes a bug AND updates docs, use 'fix'."
+)]
 #[schemars(title = "Commit Type")]
 pub enum CommitType {
     #[schemars(
-        description = "A new feature or enhancement (not docs/readme). E.g., adding a login system."
+        description = "PRIORITY 1: Bug fix or error correction. Use if ANY bug is fixed, even with other changes. E.g., fixing null pointer, crash, incorrect behavior."
     )]
-    Feat,
-    #[schemars(description = "A bug fix or error correction. E.g., fixing a crash in the parser.")]
     Fix,
     #[schemars(
-        description = "Code restructuring without behavior change. E.g., splitting a large function."
+        description = "PRIORITY 2: New feature or enhancement to functionality (not docs/readme). Use when adding new capabilities, APIs, or user-facing behavior."
+    )]
+    Feat,
+    #[schemars(
+        description = "PRIORITY 3: Performance improvements. Use when the primary goal is optimization. E.g., caching, algorithm improvements."
+    )]
+    Perf,
+    #[schemars(
+        description = "PRIORITY 4: Code restructuring WITHOUT behavior change. Only use if no bugs fixed and no features added. E.g., renaming, extracting functions."
     )]
     Refactor,
     #[schemars(
-        description = "Routine maintenance or updates (e.g., dependency bumps). E.g., updating serde."
+        description = "PRIORITY 5: Test additions or updates. Use when changes are primarily about test coverage."
+    )]
+    Test,
+    #[schemars(
+        description = "PRIORITY 6: Build system or external dependency changes. E.g., Dockerfile, Makefile, external deps."
+    )]
+    Build,
+    #[schemars(
+        description = "PRIORITY 7: CI/CD configuration changes. E.g., GitHub Actions, Jenkins, CircleCI."
+    )]
+    Ci,
+    #[schemars(
+        description = "PRIORITY 8: Maintenance tasks, internal dependency updates, tooling. E.g., updating internal deps, config files."
     )]
     Chore,
     #[schemars(
-        description = "Documentation updates (e.g., README, comments). E.g., adding API docs."
-    )]
-    Docs,
-    #[schemars(
-        description = "Formatting or stylistic changes (e.g., linting). E.g., fixing whitespace."
+        description = "PRIORITY 9: Formatting or stylistic changes ONLY. No logic changes. E.g., linting, whitespace, code style."
     )]
     Style,
-    #[schemars(description = "Test additions or updates. E.g., adding unit tests for a feature.")]
-    Test,
-    #[schemars(description = "Build system or script changes. E.g., updating the Dockerfile.")]
-    Build,
     #[schemars(
-        description = "CI/CD configuration updates. E.g., modifying a GitHub Actions workflow."
+        description = "PRIORITY 10 (LOWEST): Documentation ONLY. Use ONLY when there are NO code logic changes. E.g., README, comments, API docs."
     )]
-    Ci,
-    #[schemars(description = "Performance improvements. E.g., optimizing a query execution time.")]
-    Perf,
+    Docs,
 }
 
 // Helper function to add examples and title to schema
@@ -327,8 +338,7 @@ impl TemplateManager {
 
         // Save to file
         config::file::save_template(name, content).map_err(|e| {
-            TemplateError::IoError(std::io::Error::new(
-                std::io::ErrorKind::Other,
+            TemplateError::IoError(std::io::Error::other(
                 e.to_string(),
             ))
         })?;

@@ -135,25 +135,25 @@ impl Config {
     /// Merge with another configuration (other takes precedence)
     pub fn merge(&mut self, other: &Config) {
         // Only override non-default values
-        if other.message_only {
+        if other.message_only != defaults::defaults::MESSAGE_ONLY {
             self.message_only = other.message_only;
         }
-        if other.no_diff_stats {
+        if other.no_diff_stats != defaults::defaults::NO_DIFF_STATS {
             self.no_diff_stats = other.no_diff_stats;
         }
-        if other.show_raw_diff {
+        if other.show_raw_diff != defaults::defaults::SHOW_RAW_DIFF {
             self.show_raw_diff = other.show_raw_diff;
         }
-        if other.context_lines != 12 {
+        if other.context_lines != defaults::defaults::CONTEXT_LINES {
             self.context_lines = other.context_lines;
         }
-        if other.max_lines_per_file != 500 {
+        if other.max_lines_per_file != defaults::defaults::MAX_LINES_PER_FILE {
             self.max_lines_per_file = other.max_lines_per_file;
         }
-        if other.max_line_width != 300 {
+        if other.max_line_width != defaults::defaults::MAX_LINE_WIDTH {
             self.max_line_width = other.max_line_width;
         }
-        if other.provider != "claude" {
+        if other.provider != defaults::defaults::DEFAULT_PROVIDER {
             self.provider = other.provider.clone();
         }
         if other.model.is_some() {
@@ -162,10 +162,10 @@ impl Config {
         if other.temperature.is_some() {
             self.temperature = other.temperature;
         }
-        if !other.include_recent_commits {
+        if other.include_recent_commits != defaults::defaults::INCLUDE_RECENT_COMMITS {
             self.include_recent_commits = other.include_recent_commits;
         }
-        if other.recent_commits_count != 5 {
+        if other.recent_commits_count != defaults::defaults::RECENT_COMMITS_COUNT {
             self.recent_commits_count = other.recent_commits_count;
         }
         if other.template.is_some() {

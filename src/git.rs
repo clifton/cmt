@@ -56,7 +56,7 @@ pub fn get_staged_changes(
             .new_file()
             .path()
             .unwrap_or_else(|| std::path::Path::new(""));
-        if file_path.extension().map_or(false, |ext| ext == "lock") {
+        if file_path.extension().is_some_and(|ext| ext == "lock") {
             return true; // Skip .lock files
         }
 
@@ -141,7 +141,7 @@ pub fn git_staged_changes(repo: &Repository) -> Result<(), Box<dyn std::error::E
     let max_filename_len = changes_str
         .lines()
         .filter(|line| line.contains('|'))
-        .map(|line| line.splitn(2, '|').next().unwrap_or("").trim().len())
+        .map(|line| line.split('|').next().unwrap_or("").trim().len())
         .max()
         .unwrap_or(0);
 

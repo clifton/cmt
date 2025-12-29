@@ -5,10 +5,12 @@
 ## Features
 
 - 🤖 Supports multiple AI models:
-  - Anthropic's Claude Sonnet 3.7 (default)
-  - OpenAI's GPT-4o
-- 📝 Follows conventional commit format (`type: subject`)
+  - Anthropic's Claude (`claude-sonnet-4-5-20250929`, default)
+  - OpenAI's GPT-5.2
+- 📝 Follows conventional commit format (`type(scope): subject`)
 - 💡 Contextual hints to guide message generation
+- 📋 Copy to clipboard with `--copy`
+- ✅ Direct commit with `--commit`
 
 ## Installation
 
@@ -95,7 +97,7 @@ Options:
       --context-lines <CONTEXT_LINES>
           Number of context lines to show in the git diff [default: 12]
       --model <MODEL>
-          Use a specific AI model (defaults to claude-3-7-sonnet-latest or gpt-4o depending on provider)
+          Use a specific AI model (defaults to claude-sonnet-4-5-20250929 or gpt-5.2 depending on provider)
   -t, --temperature <TEMPERATURE>
           Adjust the creativity of the generated message (0.0 to 2.0)
       --hint <HINT>
@@ -125,7 +127,13 @@ Options:
       --config-path <CONFIG_PATH>
           Path to save the configuration file (defaults to .cmt.toml in current directory)
       --provider <PROVIDER>
-          Use a specific provider (claude, openai, etc.) [default: claude]
+          Use a specific provider (claude, openai) [default: claude]
+  -c, --copy
+          Copy the generated commit message to clipboard
+      --commit
+          Commit directly with the generated message
+  -y, --yes
+          Skip confirmation when using --commit
   -h, --help
           Print help
   -V, --version
@@ -169,16 +177,25 @@ cmt --create-template my-template --template-content "{{type}}: {{subject}}\n\n{
 cmt --template detailed
 
 # Combine multiple options
-cmt --provider openai --model gpt-4o --hint "Update dependencies for security"
+cmt --provider openai --model gpt-5.2 --hint "Update dependencies for security"
 
 # Use with git commit directly
 git commit -F <(cmt --message-only --hint "Refactor to improve performance")
+
+# Copy the commit message to clipboard
+cmt --copy
+
+# Commit directly with confirmation prompt
+cmt --commit
+
+# Commit without confirmation (for scripts/automation)
+cmt --commit --yes
 ```
 
 ## How It Works
 
 1. When you run `cmt`, it analyzes your staged git changes
-2. The changes are sent to the selected AI model (Claude or OpenAI) along with:
+2. The changes are sent to the selected AI model (Claude or GPT-4o) along with:
    - A system prompt that guides the model to generate conventional commits
    - Your optional hint for additional context
    - The staged changes as the user prompt
@@ -237,11 +254,13 @@ template = "my-template"
 The generated commit messages follow the conventional commit format:
 
 ```
-type: subject
+type(scope): subject
 
 - Detailed change 1
 - Detailed change 2
 ```
+
+The `scope` is optional and will be included when the AI identifies a specific area of the codebase being changed.
 
 Where `type` is one of:
 - `feat`: New features
@@ -251,6 +270,49 @@ Where `type` is one of:
 - `refactor`: Code refactoring
 - `test`: Adding or modifying tests
 - `chore`: Maintenance tasks
+
+## Shell Integration
+
+Add these aliases and functions to your `~/.zshrc` or `~/.bashrc` for a smoother workflow:
+
+```bash
+# Simple alias to generate and commit in one step
+alias gc='git commit -F <(cmt --message-only)'
+
+# Function to commit with a hint
+gcm() {
+    git commit -m "$(cmt --message-only --hint "$1")"
+}
+
+# Function to generate, review, and optionally commit
+gcr() {
+    local msg=$(cmt --message-only)
+    echo "Generated commit message:"
+    echo "---"
+    echo "$msg"
+    echo "---"
+    read -p "Commit with this message? [y/N] " -n 1 -r
+    echo
+    if [[ $REPLY =~ ^[Yy]$ ]]; then
+        git commit -m "$msg"
+    fi
+}
+```
+
+Usage examples:
+```bash
+# Stage and commit with AI-generated message
+git add .
+gc
+
+# Stage and commit with a hint for context
+git add .
+gcm "This fixes the authentication bug"
+
+# Review the generated message before committing
+git add .
+gcr
+```
 
 ## Development
 

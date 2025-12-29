@@ -1,4 +1,5 @@
 pub mod claude;
+mod http;
 pub mod openai;
 
 use crate::templates::CommitTemplate;
@@ -25,9 +26,39 @@ pub fn generate_commit_template_schema() -> Value {
     COMMIT_TEMPLATE_SCHEMA.clone()
 }
 
+/// Strip markdown code fences from JSON response
+fn strip_code_fences(content: &str) -> &str {
+    let trimmed = content.trim();
+
+    // Check for ```json or ``` at start
+    let without_start = if trimmed.starts_with("```json") {
+        trimmed
+            .strip_prefix("```json")
+            .unwrap_or(trimmed)
+            .trim_start()
+    } else if trimmed.starts_with("```") {
+        trimmed.strip_prefix("```").unwrap_or(trimmed).trim_start()
+    } else {
+        trimmed
+    };
+
+    // Check for ``` at end
+    if without_start.ends_with("```") {
+        without_start
+            .strip_suffix("```")
+            .unwrap_or(without_start)
+            .trim_end()
+    } else {
+        without_start
+    }
+}
+
 /// Parse a JSON string into a CommitTemplate
 pub fn parse_commit_template_json(json_str: &str) -> Result<CommitTemplate, Box<dyn Error>> {
-    serde_json::from_str(json_str).map_err(|e| {
+    // Strip markdown code fences if present
+    let clean_json = strip_code_fences(json_str);
+
+    serde_json::from_str(clean_json).map_err(|e| {
         Box::new(AiError::JsonError {
             message: format!(
                 "Failed to parse response as CommitTemplate: {}. Response: {}",

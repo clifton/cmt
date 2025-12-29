@@ -75,6 +75,38 @@ pub fn parse_commit_template_json(json_str: &str) -> Result<CommitTemplate, Box<
     })
 }
 
+/// Thinking level for models that support it (e.g., Gemini 3)
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum ThinkingLevel {
+    /// Minimal thinking - fastest, least reasoning
+    Minimal,
+    /// Low thinking - balanced speed and reasoning (default)
+    #[default]
+    Low,
+    /// High thinking - most thorough reasoning
+    High,
+}
+
+impl ThinkingLevel {
+    /// Parse from string (for CLI parsing)
+    pub fn parse(s: &str) -> Self {
+        match s.to_lowercase().as_str() {
+            "minimal" => ThinkingLevel::Minimal,
+            "high" => ThinkingLevel::High,
+            _ => ThinkingLevel::Low,
+        }
+    }
+
+    /// Convert to API string format (lowercase for Gemini API)
+    pub fn as_api_str(&self) -> &'static str {
+        match self {
+            ThinkingLevel::Minimal => "minimal",
+            ThinkingLevel::Low => "low",
+            ThinkingLevel::High => "high",
+        }
+    }
+}
+
 /// Enhanced AI provider trait that supports more diverse providers
 pub trait AiProvider: Send + Sync + Debug {
     /// Get the name of the provider
@@ -94,6 +126,7 @@ pub trait AiProvider: Send + Sync + Debug {
         temperature: f32,
         system_prompt: &str,
         user_prompt: &str,
+        thinking_level: Option<ThinkingLevel>,
     ) -> Result<CommitTemplate, Box<dyn Error>>;
 
     /// Get the JSON schema for CommitTemplate
@@ -238,6 +271,7 @@ mod tests {
             _temperature: f32,
             _system_prompt: &str,
             _user_prompt: &str,
+            _thinking_level: Option<ThinkingLevel>,
         ) -> Result<CommitTemplate, Box<dyn Error>> {
             // Return a mock TemplateData
             Ok(CommitTemplate {
@@ -292,6 +326,7 @@ mod tests {
             0.3,
             &expected_system_prompt,
             &USER_PROMPT_TEMPLATE.replace("{{changes}}", changes),
+            None,
         );
 
         assert!(result.is_ok());
@@ -306,6 +341,7 @@ mod tests {
             0.3,
             "test system prompt",
             "test user prompt",
+            None,
         );
 
         assert!(result.is_ok());
@@ -353,6 +389,7 @@ mod tests {
             0.3,
             "test system prompt",
             "test user prompt",
+            None,
         );
 
         assert!(result.is_ok());

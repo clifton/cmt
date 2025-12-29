@@ -12,6 +12,7 @@
 - 💡 Contextual hints to guide message generation
 - ✅ Interactive commit prompt by default
 - 📋 Copy to clipboard with `-c/--copy`
+- 🧠 Configurable thinking levels for Gemini (minimal/low/high)
 
 ## Installation
 
@@ -141,6 +142,8 @@ Options:
           Skip commit prompt (just show the message)
   -y, --yes
           Skip confirmation when committing
+      --thinking <THINKING>
+          Thinking level for Gemini models (minimal, low, high) - controls reasoning depth [default: low]
   -h, --help
           Print help
   -V, --version
@@ -161,6 +164,12 @@ cmt --no-commit
 
 # Copy message to clipboard
 cmt --copy
+
+# Use faster minimal thinking for simple commits
+cmt --thinking minimal
+
+# Use high thinking for complex changes
+cmt --thinking high
 
 # Commit immediately without prompting
 cmt -y

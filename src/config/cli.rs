@@ -95,6 +95,10 @@ pub struct Args {
     /// Skip confirmation when committing
     #[arg(long, short = 'y')]
     pub yes: bool,
+
+    /// Thinking level for Gemini models (minimal, low, high) - controls reasoning depth
+    #[arg(long, default_value = "low", value_parser = ["minimal", "low", "high"])]
+    pub thinking: String,
 }
 
 impl Args {

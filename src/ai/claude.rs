@@ -50,6 +50,7 @@ impl AiProvider for ClaudeProvider {
         temperature: f32,
         system_prompt: &str,
         user_prompt: &str,
+        _thinking_level: Option<crate::ai::ThinkingLevel>,
     ) -> Result<CommitTemplate, Box<dyn Error>> {
         let api_key = Self::get_api_key()?;
         let client = Client::new();
@@ -256,6 +257,7 @@ mod tests {
             0.3,
             "test system prompt",
             "test user prompt",
+            None,
         );
         assert!(result.is_ok());
         let message = result.unwrap();
@@ -293,6 +295,7 @@ mod tests {
             0.3,
             "test system prompt",
             "test user prompt",
+            None,
         );
         assert!(result.is_err());
         let error = result.unwrap_err().to_string();
@@ -332,6 +335,7 @@ mod tests {
             0.8,
             "test system prompt",
             "test user prompt",
+            None,
         );
         assert!(result.is_ok());
         let message = result.unwrap();
@@ -447,6 +451,7 @@ mod tests {
             0.3,
             "test system prompt",
             "test user prompt",
+            None,
         );
 
         // Verify that an error is returned

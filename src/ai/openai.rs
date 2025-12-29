@@ -50,6 +50,7 @@ impl AiProvider for OpenAiProvider {
         temperature: f32,
         system_prompt: &str,
         user_prompt: &str,
+        _thinking_level: Option<crate::ai::ThinkingLevel>,
     ) -> Result<CommitTemplate, Box<dyn Error>> {
         let api_key = Self::get_api_key()?;
         let client = Client::new();
@@ -282,8 +283,13 @@ mod tests {
             .create();
 
         let provider = OpenAiProvider::new();
-        let result =
-            provider.complete_structured("gpt-5.2", 1.0, "test system prompt", "test user prompt");
+        let result = provider.complete_structured(
+            "gpt-5.2",
+            1.0,
+            "test system prompt",
+            "test user prompt",
+            None,
+        );
         assert!(result.is_ok());
         let message = result.unwrap();
         assert_eq!(message.r#type, CommitType::Feat);
@@ -315,8 +321,13 @@ mod tests {
             .create();
 
         let provider = OpenAiProvider::new();
-        let result =
-            provider.complete_structured("gpt-5.2", 1.0, "test system prompt", "test user prompt");
+        let result = provider.complete_structured(
+            "gpt-5.2",
+            1.0,
+            "test system prompt",
+            "test user prompt",
+            None,
+        );
         assert!(result.is_err());
         let error = result.unwrap_err().to_string();
         assert!(error.contains("Invalid request parameters"));
@@ -359,6 +370,7 @@ mod tests {
             0.5,
             "test system prompt",
             "test user prompt",
+            None,
         );
         assert!(result.is_ok());
         let message = result.unwrap();
@@ -409,6 +421,7 @@ mod tests {
             1.0,
             "test system prompt",
             "test user prompt",
+            None,
         );
 
         // Verify that an error is returned

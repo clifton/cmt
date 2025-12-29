@@ -74,7 +74,7 @@ fn validate_commit_data(mut data: CommitTemplate) -> CommitTemplate {
                 !line_lower.contains(&subject_lower) && !subject_lower.contains(line_lower.trim_start_matches("- "))
             })
             .collect();
-        
+
         if lines.is_empty() {
             data.details = None;
         } else {
@@ -121,7 +121,7 @@ pub fn generate_commit_message(
     // Build the prompt for the AI provider
     let mut prompt = String::new();
 
-    if !recent_commits.is_empty() {
+    if !args.no_recent_commits && !recent_commits.is_empty() {
         prompt.push_str("\n\nRecent commits for context:\n");
         prompt.push_str(recent_commits);
     }
@@ -141,9 +141,17 @@ pub fn generate_commit_message(
         .temperature
         .unwrap_or_else(|| provider.default_temperature());
 
+    // Parse thinking level for Gemini models
+    let thinking_level = Some(ai::ThinkingLevel::parse(&args.thinking));
+
     // Try to complete the prompt with structured output, handle model errors specially
-    let commit_data =
-        match provider.complete_structured(&model, temperature, &system_prompt, &prompt) {
+    let commit_data = match provider.complete_structured(
+        &model,
+        temperature,
+        &system_prompt,
+        &prompt,
+        thinking_level,
+    ) {
             Ok(data) => data,
             Err(err) => {
                 if let Some(ai::AiError::InvalidModel { model }) = err.downcast_ref::<ai::AiError>()
@@ -202,7 +210,7 @@ pub mod template_mod {
 // Re-export the ai module for external use
 pub mod ai_mod {
     pub use crate::ai::create_default_registry;
-    pub use crate::ai::{AiError, AiProvider, ProviderRegistry};
+    pub use crate::ai::{AiError, AiProvider, ProviderRegistry, ThinkingLevel};
 }
 
 // Re-export AI providers for integration testing
@@ -210,7 +218,7 @@ pub mod providers {
     pub use crate::ai::claude::ClaudeProvider;
     pub use crate::ai::gemini::GeminiProvider;
     pub use crate::ai::openai::OpenAiProvider;
-    pub use crate::ai::{AiError, AiProvider};
+    pub use crate::ai::{AiError, AiProvider, ThinkingLevel};
 }
 
 // Re-export config defaults for integration testing
@@ -350,6 +358,7 @@ mod tests {
                 _temperature: f32,
                 _system_prompt: &str,
                 _user_prompt: &str,
+                _thinking_level: Option<ai::ThinkingLevel>,
             ) -> Result<CommitTemplate, Box<dyn Error>> {
                 if model == "invalid-model" {
                     return Err(
@@ -380,6 +389,7 @@ mod tests {
             0.5,
             "test system prompt",
             "test user prompt",
+            None,
         );
 
         // Verify that an error is returned
@@ -446,6 +456,7 @@ mod tests {
                 _temperature: f32,
                 _system_prompt: &str,
                 _user_prompt: &str,
+                _thinking_level: Option<ai::ThinkingLevel>,
             ) -> Result<CommitTemplate, Box<dyn Error>> {
                 Err(AiError::InvalidModel {
                     model: model.to_string(),
@@ -470,7 +481,7 @@ mod tests {
 
         // Simulate the error handling in generate_commit_message
         let err = provider
-            .complete_structured(model, 0.5, "test", "test")
+            .complete_structured(model, 0.5, "test", "test", None)
             .unwrap_err();
         let err_str = err.to_string();
 

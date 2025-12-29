@@ -1,6 +1,7 @@
 use crate::ai::http::{handle_request_error, parse_json_response};
 use crate::ai::{
-    parse_commit_template_json, AiError, AiProvider, DEFAULT_MAX_TOKENS, DEFAULT_TEMPERATURE,
+    parse_commit_template_json, AiError, AiProvider, ThinkingLevel, DEFAULT_MAX_TOKENS,
+    DEFAULT_TEMPERATURE,
 };
 use crate::templates::CommitTemplate;
 use reqwest::blocking::Client;
@@ -56,6 +57,7 @@ impl AiProvider for GeminiProvider {
         temperature: f32,
         system_prompt: &str,
         user_prompt: &str,
+        thinking_level: Option<ThinkingLevel>,
     ) -> Result<CommitTemplate, Box<dyn Error>> {
         let api_key = Self::get_api_key()?;
         let client = Client::new();
@@ -82,21 +84,41 @@ impl AiProvider for GeminiProvider {
             api_key
         );
 
+        // Add thinking config for Gemini 3 models
+        let thinking = thinking_level.unwrap_or_default();
+        let is_thinking_model = model.contains("gemini-3") || model.contains("gemini-2.5");
+
+        // Build generation config with optional thinking
+        let generation_config = if is_thinking_model {
+            json!({
+                "temperature": temperature,
+                "maxOutputTokens": DEFAULT_MAX_TOKENS,
+                "responseMimeType": "application/json",
+                "thinkingConfig": {
+                    "thinkingLevel": thinking.as_api_str()
+                }
+            })
+        } else {
+            json!({
+                "temperature": temperature,
+                "maxOutputTokens": DEFAULT_MAX_TOKENS,
+                "responseMimeType": "application/json"
+            })
+        };
+
+        let request_body = json!({
+            "contents": [{
+                "parts": [{
+                    "text": format!("{}\n\n{}", json_system_prompt, user_prompt)
+                }]
+            }],
+            "generationConfig": generation_config
+        });
+
         let response = client
             .post(&url)
             .header("content-type", "application/json")
-            .json(&json!({
-                "contents": [{
-                    "parts": [{
-                        "text": format!("{}\n\n{}", json_system_prompt, user_prompt)
-                    }]
-                }],
-                "generationConfig": {
-                    "temperature": temperature,
-                    "maxOutputTokens": DEFAULT_MAX_TOKENS,
-                    "responseMimeType": "application/json"
-                }
-            }))
+            .json(&request_body)
             .send()
             .map_err(handle_request_error)?;
 
@@ -286,6 +308,7 @@ mod tests {
             0.7,
             "test system prompt",
             "test user prompt",
+            Some(ThinkingLevel::Low),
         );
 
         assert!(result.is_ok());
@@ -319,6 +342,7 @@ mod tests {
             0.7,
             "test system prompt",
             "test user prompt",
+            None,
         );
 
         assert!(result.is_err());

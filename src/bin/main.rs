@@ -1,5 +1,5 @@
 use arboard::Clipboard;
-use cmt::ai_mod::create_default_registry;
+use cmt::ai_mod::{default_model, list_models};
 use cmt::config_mod::{file as config_file, Config};
 use cmt::pricing::{self, PricingCache};
 use cmt::template_mod::TemplateManager;
@@ -62,57 +62,40 @@ fn main() {
 
     // Handle listing available models
     if args.list_models {
-        let registry = create_default_registry();
         let provider_name = &args.provider;
 
-        match registry.get(provider_name) {
-            Some(provider) => {
-                match provider.fetch_available_models() {
-                    Ok(models) => {
-                        println!(
-                            "{}",
-                            format!("Available models for {}:", provider_name)
-                                .green()
-                                .bold(),
-                        );
+        match list_models(provider_name) {
+            Ok(models) => {
+                println!(
+                    "{}",
+                    format!("Available models for {}:", provider_name)
+                        .green()
+                        .bold(),
+                );
 
-                        // Sort models alphabetically for better readability
-                        let mut sorted_models = models.clone();
-                        sorted_models.sort();
+                // Sort models alphabetically for better readability
+                let mut sorted_models = models;
+                sorted_models.sort();
 
-                        for model in sorted_models {
-                            // Highlight the default model
-                            if model == provider.default_model() {
-                                println!("- {} (default)", model.cyan());
-                            } else {
-                                println!("- {}", model);
-                            }
-                        }
-                        process::exit(0);
-                    }
-                    Err(e) => {
-                        eprintln!(
-                            "{}",
-                            format!("Error fetching models for {}:", provider_name)
-                                .red()
-                                .bold()
-                        );
-                        eprintln!("{}", e);
-                        process::exit(1);
+                let default = default_model(provider_name);
+                for model in sorted_models {
+                    // Highlight the default model
+                    if model == default {
+                        println!("- {} (default)", model.cyan());
+                    } else {
+                        println!("- {}", model);
                     }
                 }
+                process::exit(0);
             }
-            None => {
+            Err(e) => {
                 eprintln!(
                     "{}",
-                    format!("Provider '{}' not found", provider_name)
+                    format!("Error fetching models for {}:", provider_name)
                         .red()
                         .bold()
                 );
-                eprintln!(
-                    "Available providers: {}",
-                    registry.provider_names().join(", ")
-                );
+                eprintln!("{}", e);
                 process::exit(1);
             }
         }
@@ -296,12 +279,11 @@ fn main() {
         println!();
     }
 
-    // Get provider and model info for display
-    let registry = create_default_registry();
+    // Get model info for display
     let model_name = args
         .model
         .clone()
-        .unwrap_or_else(|| registry.default_model_for(&args.provider));
+        .unwrap_or_else(|| default_model(&args.provider).to_string());
 
     // Show diff stats before sending to LLM (unless message-only mode)
     if !args.message_only && !args.no_diff_stats {
@@ -319,7 +301,7 @@ fn main() {
     };
 
     let start_time = Instant::now();
-    let commit_message = match generate_commit_message(
+    let result = match generate_commit_message(
         &args,
         &staged_changes,
         &recent_commits,
@@ -327,11 +309,11 @@ fn main() {
         branch_name.as_deref(),
         readme_excerpt.as_deref(),
     ) {
-        Ok(message) => {
+        Ok(result) => {
             if let Some(s) = &spinner {
                 s.finish_and_clear();
             }
-            message
+            result
         }
         Err(e) => {
             if let Some(s) = &spinner {
@@ -343,6 +325,7 @@ fn main() {
         }
     };
     let elapsed = start_time.elapsed();
+    let commit_message = result.message;
 
     // Copy to clipboard if requested
     if args.copy {
@@ -379,22 +362,38 @@ fn main() {
         println!("{}", "Commit message:".green().bold());
         println!("{}", commit_message);
 
-        // Show stats: tokens, time, cost
-        // Rough estimate: ~4 chars per token
-        let input_tokens = (staged_changes.len() + recent_commits.len()) / 4;
-        let output_tokens = commit_message.len() / 4;
+        // Use actual token counts from API, or estimate if not available
+        let (input_tokens, output_tokens) = match (result.input_tokens, result.output_tokens) {
+            (Some(input), Some(output)) => (input, output),
+            _ => {
+                // Fallback: estimate ~4 chars per token
+                let est_input = (staged_changes.len() + recent_commits.len()) as u64 / 4;
+                let est_output = commit_message.len() as u64 / 4;
+                (est_input, est_output)
+            }
+        };
         let total_tokens = input_tokens + output_tokens;
         let elapsed_secs = elapsed.as_secs_f32();
 
         let cost_str = pricing_cache
             .get_model_pricing(&args.provider, &model_name)
-            .and_then(|p| pricing::calculate_cost(&p, input_tokens as u64, output_tokens as u64))
+            .and_then(|p| pricing::calculate_cost(&p, input_tokens, output_tokens))
             .map(|c| format!(", {}", pricing::format_cost(c)))
             .unwrap_or_default();
 
+        // Show ~ prefix only if we're estimating
+        let token_prefix = if result.input_tokens.is_some() {
+            ""
+        } else {
+            "~"
+        };
         println!(
             "{}",
-            format!("~{} tokens, {:.1}s{}", total_tokens, elapsed_secs, cost_str).dimmed()
+            format!(
+                "{}{} tokens, {:.1}s{}",
+                token_prefix, total_tokens, elapsed_secs, cost_str
+            )
+            .dimmed()
         );
 
         // Handle commit prompt (default behavior unless --no-commit)
@@ -473,9 +472,9 @@ fn main() {
                                     branch_name.as_deref(),
                                     readme_excerpt.as_deref(),
                                 ) {
-                                    Ok(new_message) => {
+                                    Ok(new_result) => {
                                         spinner.finish_and_clear();
-                                        current_message = new_message;
+                                        current_message = new_result.message;
                                         println!();
                                         println!("{}", "Commit message:".green().bold());
                                         println!("{}", current_message);

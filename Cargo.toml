@@ -27,11 +27,6 @@ path = "src/lib.rs"
 [dependencies]
 git2 = { version = "0.20.3", default-features = false }
 colored = "3.0.0"
-reqwest = { version = "0.12.28", features = [
-  "json",
-  "blocking",
-  "rustls-tls",
-], default-features = false }
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.148"
 dotenv = "0.15.0"
@@ -39,16 +34,25 @@ clap = { version = "4.5.53", features = ["derive", "std"] }
 thiserror = "2.0.17"
 handlebars = "6.3.1"
 toml = "0.9.8"
-schemars = "1.2.0"
-lazy_static = "1.5.0"
 indicatif = "0.18.3"
 arboard = "3.6.1"
 dirs = "6.0.0"
 
+# AI structured output
+rstructor = { version = "0.2", features = ["openai", "anthropic", "gemini"] }
+tokio = { version = "1", features = ["rt"] }
+
+# HTTP client for pricing (rstructor handles AI requests)
+reqwest = { version = "0.12", features = [
+  "json",
+  "blocking",
+  "rustls-tls",
+], default-features = false }
+
 [dev-dependencies]
 tempfile = "3.24.0"
-mockito = "1.7.1"
 serial_test = "3.2.0"
+tokio = { version = "1", features = ["rt", "macros"] }
 
 [profile.release]
 opt-level = "z"   # Optimize for size

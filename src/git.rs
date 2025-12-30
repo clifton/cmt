@@ -212,27 +212,27 @@ pub fn get_staged_changes(
 
     // Get stats in the same pass
     let git_stats = diff.stats()?;
-    let mut format_opts = git2::DiffStatsFormat::empty();
-    format_opts.insert(git2::DiffStatsFormat::FULL);
-    let changes_buf = git_stats.to_buf(format_opts, 80)?;
-    let changes_str = String::from_utf8_lossy(&changes_buf);
 
-    let file_changes: Vec<(String, usize, usize)> = changes_str
-        .lines()
-        .filter(|line| line.contains('|'))
-        .filter_map(|line| {
-            let parts: Vec<&str> = line.splitn(2, '|').collect();
-            if parts.len() == 2 {
-                let file = parts[0].trim().to_string();
-                let changes = parts[1].trim();
-                let adds = changes.chars().filter(|&c| c == '+').count();
-                let dels = changes.chars().filter(|&c| c == '-').count();
-                Some((file, adds, dels))
-            } else {
-                None
+    // Collect per-file stats using Patch API for accurate line counts
+    let mut file_changes: Vec<(String, usize, usize)> = Vec::new();
+    for delta_idx in 0..diff.deltas().len() {
+        if let Ok(Some(patch)) = git2::Patch::from_diff(&diff, delta_idx) {
+            let file_path = patch
+                .delta()
+                .new_file()
+                .path()
+                .or_else(|| patch.delta().old_file().path())
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_default();
+
+            // line_stats returns (context_lines, additions, deletions)
+            let (_, additions, deletions) = patch.line_stats().unwrap_or((0, 0, 0));
+
+            if !file_path.is_empty() {
+                file_changes.push((file_path, additions, deletions));
             }
-        })
-        .collect();
+        }
+    }
 
     let stats = DiffStats {
         files_changed: git_stats.files_changed(),
@@ -511,5 +511,130 @@ mod tests {
         // Assert that the line is truncated to max_line_width
         assert!(staged.diff_text.contains(&long_line[..max_line_width]));
         assert!(staged.diff_text.contains("..."));
+    }
+
+    #[test]
+    fn test_file_changes_new_file() {
+        let (_temp_dir, repo) = setup_test_repo();
+
+        // Create and stage a new file with 5 lines
+        let content = "line1\nline2\nline3\nline4\nline5";
+        create_and_stage_file(&repo, "test.txt", content);
+
+        let staged = get_staged_changes(&repo, 0, 100, 300).unwrap();
+
+        // Check overall stats
+        assert_eq!(staged.stats.files_changed, 1);
+        assert_eq!(staged.stats.insertions, 5);
+        assert_eq!(staged.stats.deletions, 0);
+
+        // Check per-file stats
+        assert_eq!(staged.stats.file_changes.len(), 1);
+        let (file, adds, dels) = &staged.stats.file_changes[0];
+        assert_eq!(file, "test.txt");
+        assert_eq!(*adds, 5);
+        assert_eq!(*dels, 0);
+    }
+
+    #[test]
+    fn test_file_changes_modified_file() {
+        let (_temp_dir, repo) = setup_test_repo();
+
+        // Create and commit initial file with 3 lines
+        create_and_stage_file(&repo, "test.txt", "line1\nline2\nline3");
+        commit_all(&repo, "Initial commit");
+
+        // Modify file: change line2, add line4
+        create_and_stage_file(&repo, "test.txt", "line1\nmodified\nline3\nline4");
+
+        let staged = get_staged_changes(&repo, 0, 100, 300).unwrap();
+
+        // Check per-file stats - should have 2 insertions (modified, line4) and 1 deletion (line2)
+        assert_eq!(staged.stats.file_changes.len(), 1);
+        let (file, adds, dels) = &staged.stats.file_changes[0];
+        assert_eq!(file, "test.txt");
+        assert_eq!(*adds, 2);
+        assert_eq!(*dels, 1);
+    }
+
+    #[test]
+    fn test_file_changes_multiple_files() {
+        let (_temp_dir, repo) = setup_test_repo();
+
+        // Create initial commit
+        create_and_stage_file(&repo, "file1.txt", "a\nb\nc");
+        create_and_stage_file(&repo, "file2.txt", "x\ny");
+        commit_all(&repo, "Initial commit");
+
+        // Stage changes to multiple files
+        create_and_stage_file(&repo, "file1.txt", "a\nmodified\nc\nd"); // +2 -1
+        create_and_stage_file(&repo, "file2.txt", "x"); // -1
+        create_and_stage_file(&repo, "file3.txt", "new1\nnew2\nnew3"); // +3
+
+        let staged = get_staged_changes(&repo, 0, 100, 300).unwrap();
+
+        // Check overall stats
+        assert_eq!(staged.stats.files_changed, 3);
+
+        // Check per-file stats
+        assert_eq!(staged.stats.file_changes.len(), 3);
+
+        // Find each file's stats (order may vary)
+        let file1_stats = staged
+            .stats
+            .file_changes
+            .iter()
+            .find(|(f, _, _)| f == "file1.txt");
+        let file2_stats = staged
+            .stats
+            .file_changes
+            .iter()
+            .find(|(f, _, _)| f == "file2.txt");
+        let file3_stats = staged
+            .stats
+            .file_changes
+            .iter()
+            .find(|(f, _, _)| f == "file3.txt");
+
+        assert!(file1_stats.is_some());
+        assert!(file2_stats.is_some());
+        assert!(file3_stats.is_some());
+
+        let (_, adds1, dels1) = file1_stats.unwrap();
+        assert_eq!(*adds1, 2);
+        assert_eq!(*dels1, 1);
+
+        let (_, adds2, dels2) = file2_stats.unwrap();
+        assert_eq!(*adds2, 0);
+        assert_eq!(*dels2, 1);
+
+        let (_, adds3, dels3) = file3_stats.unwrap();
+        assert_eq!(*adds3, 3);
+        assert_eq!(*dels3, 0);
+    }
+
+    #[test]
+    fn test_file_changes_sum_matches_total() {
+        let (_temp_dir, repo) = setup_test_repo();
+
+        // Create initial commit
+        create_and_stage_file(&repo, "a.txt", "1\n2\n3\n4\n5");
+        create_and_stage_file(&repo, "b.txt", "a\nb\nc");
+        commit_all(&repo, "Initial commit");
+
+        // Make various changes
+        create_and_stage_file(&repo, "a.txt", "1\nchanged\n3\n4\n5\n6\n7"); // +3 -1
+        create_and_stage_file(&repo, "b.txt", "a"); // -2
+        create_and_stage_file(&repo, "c.txt", "new\nfile"); // +2
+
+        let staged = get_staged_changes(&repo, 0, 100, 300).unwrap();
+
+        // Sum up per-file stats
+        let total_adds: usize = staged.stats.file_changes.iter().map(|(_, a, _)| a).sum();
+        let total_dels: usize = staged.stats.file_changes.iter().map(|(_, _, d)| d).sum();
+
+        // Verify they match overall stats
+        assert_eq!(total_adds, staged.stats.insertions);
+        assert_eq!(total_dels, staged.stats.deletions);
     }
 }

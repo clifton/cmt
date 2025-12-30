@@ -40,12 +40,11 @@ dirs = "6.0.0"
 
 # AI structured output
 rstructor = { version = "0.2", features = ["openai", "anthropic", "gemini"] }
-tokio = { version = "1", features = ["rt"] }
+tokio = { version = "1", features = ["rt", "macros"] }
 
 # HTTP client for pricing (rstructor handles AI requests)
 reqwest = { version = "0.12", features = [
   "json",
-  "blocking",
   "rustls-tls",
 ], default-features = false }
 

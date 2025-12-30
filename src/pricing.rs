@@ -8,8 +8,8 @@ use std::fs;
 use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::sync::mpsc;
-use std::thread;
 use std::time::{Duration, SystemTime};
+use tokio::task;
 
 const PRICING_URL: &str =
     "https://raw.githubusercontent.com/BerriAI/litellm/main/model_prices_and_context_window.json";
@@ -67,9 +67,9 @@ impl PricingCache {
     pub fn new() -> Self {
         let (tx, rx) = mpsc::channel();
 
-        // Spawn background thread to fetch/load pricing
-        thread::spawn(move || {
-            if let Some(pricing) = load_or_fetch_pricing() {
+        // Spawn background task to fetch/load pricing
+        task::spawn(async move {
+            if let Some(pricing) = load_or_fetch_pricing().await {
                 let _ = tx.send(pricing);
             }
         });
@@ -87,7 +87,7 @@ impl PricingCache {
             return self.data.as_ref();
         }
 
-        // Try to receive from background thread (non-blocking)
+        // Try to receive from background task (non-blocking)
         if let Some(ref rx) = self.receiver {
             if let Ok(data) = rx.try_recv() {
                 self.data = Some(data);
@@ -201,7 +201,7 @@ fn is_cache_valid(path: &PathBuf) -> bool {
 }
 
 /// Load pricing from cache or fetch from network
-fn load_or_fetch_pricing() -> Option<HashMap<String, ModelPricing>> {
+async fn load_or_fetch_pricing() -> Option<HashMap<String, ModelPricing>> {
     let cache_path = cache_file()?;
 
     // Try loading from cache first
@@ -217,17 +217,17 @@ fn load_or_fetch_pricing() -> Option<HashMap<String, ModelPricing>> {
     }
 
     // Fetch from network
-    fetch_and_cache_pricing(&cache_path)
+    fetch_and_cache_pricing(&cache_path).await
 }
 
 /// Fetch pricing from network and cache it
-fn fetch_and_cache_pricing(cache_path: &PathBuf) -> Option<HashMap<String, ModelPricing>> {
-    let client = reqwest::blocking::Client::builder()
+async fn fetch_and_cache_pricing(cache_path: &PathBuf) -> Option<HashMap<String, ModelPricing>> {
+    let client = reqwest::Client::builder()
         .timeout(Duration::from_secs(10))
         .build()
         .ok()?;
 
-    let response = match client.get(PRICING_URL).send() {
+    let response = match client.get(PRICING_URL).send().await {
         Ok(r) => r,
         Err(_e) => {
             #[cfg(test)]
@@ -242,7 +242,7 @@ fn fetch_and_cache_pricing(cache_path: &PathBuf) -> Option<HashMap<String, Model
         return None;
     }
 
-    let text = match response.text() {
+    let text = match response.text().await {
         Ok(t) => t,
         Err(_e) => {
             #[cfg(test)]

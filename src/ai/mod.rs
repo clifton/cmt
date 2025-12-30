@@ -3,7 +3,6 @@
 use crate::templates::CommitTemplate;
 use rstructor::{LLMClient, ModelInfo, ThinkingLevel as RstructorThinkingLevel, TokenUsage};
 use std::error::Error;
-use tokio::runtime::Runtime;
 
 /// Default temperature for commit message generation
 pub const DEFAULT_TEMPERATURE: f32 = 0.3;
@@ -99,7 +98,7 @@ pub fn check_available(provider: &str) -> Result<(), AiError> {
 
 /// Generate a structured commit template from the AI provider
 /// Returns the template along with token usage information
-pub fn complete_structured(
+pub async fn complete_structured(
     provider: &str,
     model: &str,
     temperature: f32,
@@ -112,23 +111,18 @@ pub fn complete_structured(
 
     let thinking = thinking_level.unwrap_or_default().as_rstructor();
 
-    // Create runtime for async operations
-    let rt = Runtime::new().map_err(|e| format!("Failed to create tokio runtime: {}", e))?;
-
     // Build prompt combining system and user prompts
     let full_prompt = format!("{}\n\n{}", system_prompt, user_prompt);
 
     // Execute the appropriate provider
-    rt.block_on(async {
-        match provider.to_lowercase().as_str() {
-            "claude" => complete_claude(model, temperature, &full_prompt, thinking).await,
-            "openai" => complete_openai(model, temperature, &full_prompt, thinking).await,
-            "gemini" => complete_gemini(model, temperature, &full_prompt, thinking).await,
-            _ => Err(Box::new(AiError::ProviderNotFound {
-                provider_name: provider.to_string(),
-            }) as Box<dyn Error>),
-        }
-    })
+    match provider.to_lowercase().as_str() {
+        "claude" => complete_claude(model, temperature, &full_prompt, thinking).await,
+        "openai" => complete_openai(model, temperature, &full_prompt, thinking).await,
+        "gemini" => complete_gemini(model, temperature, &full_prompt, thinking).await,
+        _ => Err(Box::new(AiError::ProviderNotFound {
+            provider_name: provider.to_string(),
+        }) as Box<dyn Error>),
+    }
 }
 
 async fn complete_claude(
@@ -204,24 +198,19 @@ async fn complete_gemini(
 }
 
 /// List available models for a provider
-pub fn list_models(provider: &str) -> Result<Vec<String>, Box<dyn Error>> {
+pub async fn list_models(provider: &str) -> Result<Vec<String>, Box<dyn Error>> {
     // Check provider is available
     check_available(provider)?;
 
-    // Create runtime for async operations
-    let rt = Runtime::new().map_err(|e| format!("Failed to create tokio runtime: {}", e))?;
-
     // Execute the appropriate provider's list_models
-    let models = rt.block_on(async {
-        match provider.to_lowercase().as_str() {
-            "claude" => list_models_claude().await,
-            "openai" => list_models_openai().await,
-            "gemini" => list_models_gemini().await,
-            _ => Err(Box::new(AiError::ProviderNotFound {
-                provider_name: provider.to_string(),
-            }) as Box<dyn Error>),
-        }
-    })?;
+    let models = match provider.to_lowercase().as_str() {
+        "claude" => list_models_claude().await,
+        "openai" => list_models_openai().await,
+        "gemini" => list_models_gemini().await,
+        _ => Err(Box::new(AiError::ProviderNotFound {
+            provider_name: provider.to_string(),
+        }) as Box<dyn Error>),
+    }?;
 
     // Extract model IDs from ModelInfo
     Ok(models.into_iter().map(|m| m.id).collect())

@@ -19,7 +19,8 @@ enum CommitAction {
     Hint,
 }
 
-fn main() {
+#[tokio::main]
+async fn main() {
     dotenv().ok(); // Load .env file if it exists
     let args = Args::new_from(env::args());
 
@@ -42,29 +43,30 @@ fn main() {
         }
     }
 
+    // Initialize template manager once
+    let template_manager = match TemplateManager::new() {
+        Ok(manager) => manager,
+        Err(e) => {
+            eprintln!("{}", "Error initializing templates:".red().bold());
+            eprintln!("{}", e);
+            process::exit(1);
+        }
+    };
+
     // Handle listing available templates
     if args.list_templates {
-        match TemplateManager::new() {
-            Ok(manager) => {
-                println!("{}", "Available templates:".green().bold());
-                for template in manager.list_templates() {
-                    println!("- {}", template);
-                }
-                process::exit(0);
-            }
-            Err(e) => {
-                eprintln!("{}", "Error listing templates:".red().bold());
-                eprintln!("{}", e);
-                process::exit(1);
-            }
+        println!("{}", "Available templates:".green().bold());
+        for template in template_manager.list_templates() {
+            println!("- {}", template);
         }
+        process::exit(0);
     }
 
     // Handle listing available models
     if args.list_models {
         let provider_name = &args.provider;
 
-        match list_models(provider_name) {
+        match list_models(provider_name).await {
             Ok(models) => {
                 println!(
                     "{}",
@@ -308,7 +310,10 @@ fn main() {
         analysis.as_ref(),
         branch_name.as_deref(),
         readme_excerpt.as_deref(),
-    ) {
+        &template_manager,
+    )
+    .await
+    {
         Ok(result) => {
             if let Some(s) = &spinner {
                 s.finish_and_clear();
@@ -471,7 +476,10 @@ fn main() {
                                     analysis.as_ref(),
                                     branch_name.as_deref(),
                                     readme_excerpt.as_deref(),
-                                ) {
+                                    &template_manager,
+                                )
+                                .await
+                                {
                                     Ok(new_result) => {
                                         spinner.finish_and_clear();
                                         current_message = new_result.message;

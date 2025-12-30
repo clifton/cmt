@@ -18,7 +18,7 @@ pub use progress::Spinner;
 
 pub use analysis::{analyze_diff, DiffAnalysis};
 
-use templates::CommitTemplate;
+use templates::{CommitTemplate, TemplateManager};
 
 /// Result of commit message generation
 #[derive(Debug)]
@@ -83,19 +83,19 @@ fn validate_commit_data(mut data: CommitTemplate) -> CommitTemplate {
     data
 }
 
-pub fn generate_commit_message(
+pub async fn generate_commit_message(
     args: &Args,
     git_diff: &str,
     recent_commits: &str,
     analysis: Option<&DiffAnalysis>,
     branch_name: Option<&str>,
     readme_excerpt: Option<&str>,
+    template_manager: &TemplateManager,
 ) -> Result<GenerateResult, Box<dyn std::error::Error>> {
     let template_name = args
         .template
         .clone()
         .unwrap_or_else(|| config::defaults::DEFAULT_TEMPLATE.to_string());
-    let template_manager = templates::TemplateManager::new()?;
 
     // Get provider name
     let provider_name = &args.provider;
@@ -160,7 +160,9 @@ pub fn generate_commit_message(
         &system_prompt,
         &prompt,
         thinking_level,
-    ) {
+    )
+    .await
+    {
         Ok(result) => result,
         Err(err) => {
             // Check for invalid model error
@@ -224,8 +226,8 @@ mod tests {
     use crate::config::cli::Args;
     use std::env;
 
-    #[test]
-    fn test_unsupported_provider() {
+    #[tokio::test]
+    async fn test_unsupported_provider() {
         // Create args with an unsupported provider
         let args = Args::new_from(
             ["cmt", "--provider", "unsupported_provider"]
@@ -233,8 +235,11 @@ mod tests {
                 .map(ToString::to_string),
         );
 
+        let template_manager = TemplateManager::new().unwrap();
+
         // Call generate_commit_message with the unsupported provider
-        let result = generate_commit_message(&args, "", "", None, None, None);
+        let result =
+            generate_commit_message(&args, "", "", None, None, None, &template_manager).await;
 
         // Verify that an error is returned
         assert!(result.is_err());
@@ -250,9 +255,9 @@ mod tests {
         );
     }
 
-    #[test]
+    #[tokio::test]
     #[serial_test::serial]
-    fn test_provider_not_available() {
+    async fn test_provider_not_available() {
         // Temporarily unset the API keys
         let had_anthropic_key = env::var("ANTHROPIC_API_KEY").is_ok();
 
@@ -267,8 +272,11 @@ mod tests {
                 .map(ToString::to_string),
         );
 
+        let template_manager = TemplateManager::new().unwrap();
+
         // Call generate_commit_message with the claude provider
-        let result = generate_commit_message(&args, "", "", None, None, None);
+        let result =
+            generate_commit_message(&args, "", "", None, None, None, &template_manager).await;
 
         // Verify that an error is returned
         assert!(result.is_err());

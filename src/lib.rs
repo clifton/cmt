@@ -144,8 +144,13 @@ pub fn generate_commit_message(
     // Generate the commit message
     let temperature = args.temperature.unwrap_or(ai::DEFAULT_TEMPERATURE);
 
-    // Parse thinking level
-    let thinking_level = Some(ai::ThinkingLevel::parse(&args.thinking));
+    // Parse thinking level (default to Off for Claude due to max_tokens/budget_tokens issue)
+    let thinking_level = if provider_name == "claude" && args.thinking == "low" {
+        // Claude's default should be Off until rstructor handles max_tokens properly
+        Some(ai::ThinkingLevel::Off)
+    } else {
+        Some(ai::ThinkingLevel::parse(&args.thinking))
+    };
 
     // Try to complete the prompt with structured output
     let completion = match ai::complete_structured(

@@ -183,7 +183,7 @@ echo "✓ Diff statistics display working"
 # Test Gemini (default)
 test_provider "Gemini" "--provider gemini" ""
 
-# Test Claude
+# Test Claude (thinking defaults to none for Claude due to max_tokens/budget_tokens issue)
 test_provider "Claude" "--provider claude" ""
 
 # Test OpenAI

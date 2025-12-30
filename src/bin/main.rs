@@ -43,26 +43,7 @@ async fn main() {
         }
     }
 
-    // Initialize template manager once
-    let template_manager = match TemplateManager::new() {
-        Ok(manager) => manager,
-        Err(e) => {
-            eprintln!("{}", "Error initializing templates:".red().bold());
-            eprintln!("{}", e);
-            process::exit(1);
-        }
-    };
-
-    // Handle listing available templates
-    if args.list_templates {
-        println!("{}", "Available templates:".green().bold());
-        for template in template_manager.list_templates() {
-            println!("- {}", template);
-        }
-        process::exit(0);
-    }
-
-    // Handle listing available models
+    // Handle listing available models (doesn't need templates)
     if args.list_models {
         let provider_name = &args.provider;
 
@@ -103,7 +84,7 @@ async fn main() {
         }
     }
 
-    // Handle showing template content
+    // Handle showing template content (doesn't need TemplateManager)
     if let Some(template_name) = &args.show_template {
         match config_file::get_template(template_name) {
             Ok(content) => {
@@ -127,7 +108,7 @@ async fn main() {
         }
     }
 
-    // Handle creating a new template
+    // Handle creating a new template (doesn't need TemplateManager)
     if let Some(template_name) = &args.create_template {
         // Ensure template directory exists
         if let Err(e) = config_file::create_template_dir() {
@@ -174,6 +155,25 @@ async fn main() {
                 process::exit(1);
             }
         }
+    }
+
+    // Initialize template manager (only needed for --list-templates and commit generation)
+    let template_manager = match TemplateManager::new() {
+        Ok(manager) => manager,
+        Err(e) => {
+            eprintln!("{}", "Error initializing templates:".red().bold());
+            eprintln!("{}", e);
+            process::exit(1);
+        }
+    };
+
+    // Handle listing available templates
+    if args.list_templates {
+        println!("{}", "Available templates:".green().bold());
+        for template in template_manager.list_templates() {
+            println!("- {}", template);
+        }
+        process::exit(0);
     }
 
     // Load configuration

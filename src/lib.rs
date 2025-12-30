@@ -238,7 +238,8 @@ mod tests {
         let template_manager = TemplateManager::new().unwrap();
 
         // Call generate_commit_message with the unsupported provider
-        let result = generate_commit_message(&args, "", "", None, None, None, &template_manager).await;
+        let result =
+            generate_commit_message(&args, "", "", None, None, None, &template_manager).await;
 
         // Verify that an error is returned
         assert!(result.is_err());
@@ -274,7 +275,8 @@ mod tests {
         let template_manager = TemplateManager::new().unwrap();
 
         // Call generate_commit_message with the claude provider
-        let result = generate_commit_message(&args, "", "", None, None, None, &template_manager).await;
+        let result =
+            generate_commit_message(&args, "", "", None, None, None, &template_manager).await;
 
         // Verify that an error is returned
         assert!(result.is_err());

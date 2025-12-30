@@ -3,31 +3,50 @@ alwaysApply: true
 ---
 # LLM Provider & Model Updates
 
+## ⚠️ CRITICAL: Do NOT Use Training Data for Model Names
+
+Your training data contains OUTDATED model names. Models like `gpt-4o`, `gpt-4.1-mini`, `claude-sonnet-4-20250514`, `gemini-2.5-flash` are OLD.
+
+**NEVER use model names from memory. ALWAYS verify against the ground truth below or ask the user.**
+
+## Current Model IDs (Ground Truth for this Project)
+
+These are the CORRECT model IDs as of the last verification. Use these EXACTLY:
+
+| Provider | Model ID | Last Verified |
+|----------|----------|---------------|
+| Anthropic | `claude-sonnet-4-5-20250929` | 2025-12-29 |
+| Anthropic | `claude-opus-4-20250514` | 2025-12-29 |
+| OpenAI | `gpt-5.2` | 2025-12-29 |
+| Google | `gemini-3-flash-preview` | 2025-12-29 |
+
 ## Triggers
-- **Files:** Any file containing model definitions, enums, or provider configurations (e.g., `models.py`, `providers.ts`, `llm_config.json`).
+- **Files:** Any file containing model definitions, enums, or provider configurations (e.g., `defaults.rs`, `mod.rs`, `cli.rs`).
 - **User Intent:** Requests to "update models", "check for new models", or "add [Provider] support".
 
 ## Mandatory Workflow
 When these triggers are active, you **MUST** follow this protocol before writing code:
 
-1.  **Search First:** Do not rely on your training data for model names. You must use the `search` tool.
-2.  **Query Pattern:** Search specifically for:
-    - "latest [Provider Name] API model names list [Current Month] [Current Year]"
-    - "[Provider Name] model deprecation schedule"
-    - **"[Provider Name] API model ID string"** ← Add this query
-3.  **Verification:**
-    - Identify the specific API string (e.g., `gpt-4o-2024-08-06` vs `gpt-4o`). Use "-latest" suffix if explicitly available.
-    - **CRITICAL: Web search often returns marketing names, not API strings. When in doubt, ask the user to confirm the exact model ID.**
-4.  **Implementation:**
-    - Update the constants/enums.
-    - Add comments with the "Last Verified" date next to the model ID.
+1. **Check Ground Truth First:** Use the table above for this project's models.
+2. **If Uncertain, Search:** Use the `web_search` tool with:
+   - "latest [Provider Name] API model names list [Current Month] [Current Year]"
+   - "[Provider Name] model deprecation schedule"
+   - "[Provider Name] API model ID string"
+3. **Verification:**
+   - Identify the specific API string (e.g., `gpt-5.2` vs `gpt-4o`).
+   - **CRITICAL: Web search often returns marketing names, not API strings. When in doubt, ask the user to confirm the exact model ID.**
+4. **Implementation:**
+   - Update the constants/enums.
+   - Add comments with the "Last Verified" date next to the model ID.
 
-## Known Model ID Patterns (Ground Truth)
-**CRITICAL: These patterns OVERRIDE web search results. Web search returns marketing names like "Claude Sonnet 4" but the actual API string is `claude-sonnet-4-5-20250929`. ALWAYS match the pattern format below, not the search result wording.**
+## Known Model ID Patterns
 
-- **Anthropic:** `claude-{tier}-{version}-{date}` (e.g., `claude-sonnet-4-5-20250929`, `claude-opus-4-20250514`)
+**CRITICAL: These patterns OVERRIDE web search results. Web search returns marketing names like "Claude Sonnet 4" but the actual API string is `claude-sonnet-4-5-20250929`.**
+
+- **Anthropic:** `claude-{tier}-{version}-{date}` (e.g., `claude-sonnet-4-5-20250929`)
   - **NOTE:** Anthropic API does NOT accept `-latest` aliases. Always use dated versions.
-- **OpenAI:** `gpt-{version}` or `gpt-{version}-{date}` (e.g., `gpt-5.2`, `gpt-4o-2024-08-06`)
+- **OpenAI:** `gpt-{version}` (e.g., `gpt-5.2`)
+- **Google/Gemini:** `gemini-{version}-{variant}` with `-preview` suffix for newer models (e.g., `gemini-3-flash-preview`)
 
 ## Standard Provider Docs
 Use these sources for verification:
@@ -37,7 +56,11 @@ Use these sources for verification:
 - **Mistral:** https://docs.mistral.ai/getting-started/models/
 - **Grok:** https://docs.x.ai/docs/models
 
-Always assume search results are accurate and do not show future dates. If you want to make sure its not a future date, run a shell command to get the current date.
-
 ## Fallback Protocol
 If search results only show marketing names (e.g., "Claude Sonnet 4" without the API string), **ask the user** for the correct API identifier before making changes.
+
+## Prohibited (Outdated) Model IDs
+DO NOT USE these old model IDs:
+- ❌ `gpt-4o`, `gpt-4.1-mini`, `gpt-4o-2024-08-06` → Use `gpt-5.2`
+- ❌ `claude-sonnet-4-20250514`, `claude-3-5-sonnet-*` → Use `claude-sonnet-4-5-20250929`
+- ❌ `gemini-2.5-flash`, `gemini-1.5-*` → Use `gemini-3-flash-preview`

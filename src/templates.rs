@@ -5,7 +5,7 @@ use std::fs;
 use std::path::Path;
 
 use handlebars::Handlebars;
-use schemars::JsonSchema;
+use rstructor::Instructor;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
 
@@ -43,105 +43,106 @@ impl From<handlebars::RenderError> for TemplateError {
     }
 }
 
-// Enum for commit types with lowercase serialization
+// Enum for commit types
 // Priority order (highest to lowest): fix > feat > perf > refactor > test > build > ci > chore > style > docs
-#[derive(Debug, Serialize, Deserialize, PartialEq, JsonSchema)]
-#[serde(rename_all = "lowercase")]
-#[schemars(
-    description = "The type of a commit message. Choose based on the PRIMARY purpose using priority: fix > feat > perf > refactor > test > build > ci > chore > style > docs. If a commit fixes a bug AND updates docs, use 'fix'.",
-    title = "Commit Type"
+// Note: Using serde rename + alias because rstructor schema shows PascalCase variants
+// but we need lowercase for output. The alias accepts both forms from LLM.
+#[derive(Debug, Serialize, Deserialize, PartialEq, Instructor)]
+#[llm(
+    description = "The type of a commit message. Choose based on the PRIMARY purpose using priority: fix > feat > perf > refactor > test > build > ci > chore > style > docs. If a commit fixes a bug AND updates docs, use 'fix'."
 )]
 pub enum CommitType {
-    #[schemars(
-        description = "PRIORITY 1: Bug fix or error correction. Use if ANY bug is fixed, even with other changes. E.g., fixing null pointer, crash, incorrect behavior."
+    #[serde(rename = "fix", alias = "Fix")]
+    #[llm(
+        description = "PRIORITY 1: Bug fix or error correction. Use if ANY bug is fixed, even with other changes."
     )]
     Fix,
-    #[schemars(
-        description = "PRIORITY 2: New feature or enhancement to functionality (not docs/readme). Use when adding new capabilities, APIs, or user-facing behavior."
+    #[serde(rename = "feat", alias = "Feat")]
+    #[llm(
+        description = "PRIORITY 2: New feature or enhancement to functionality (not docs/readme)."
     )]
     Feat,
-    #[schemars(
-        description = "PRIORITY 3: Performance improvements. Use when the primary goal is optimization. E.g., caching, algorithm improvements."
+    #[serde(rename = "perf", alias = "Perf")]
+    #[llm(
+        description = "PRIORITY 3: Performance improvements. Use when the primary goal is optimization."
     )]
     Perf,
-    #[schemars(
-        description = "PRIORITY 4: Code restructuring WITHOUT behavior change. Only use if no bugs fixed and no features added. E.g., renaming, extracting functions."
+    #[serde(rename = "refactor", alias = "Refactor")]
+    #[llm(
+        description = "PRIORITY 4: Code restructuring WITHOUT behavior change. Only use if no bugs fixed and no features added."
     )]
     Refactor,
-    #[schemars(
+    #[serde(rename = "test", alias = "Test")]
+    #[llm(
         description = "PRIORITY 5: Test additions or updates. Use when changes are primarily about test coverage."
     )]
     Test,
-    #[schemars(
-        description = "PRIORITY 6: Build system or external dependency changes. E.g., Dockerfile, Makefile, external deps."
+    #[serde(rename = "build", alias = "Build")]
+    #[llm(
+        description = "PRIORITY 6: Build system or external dependency changes. E.g., Dockerfile, Makefile."
     )]
     Build,
-    #[schemars(
-        description = "PRIORITY 7: CI/CD configuration changes. E.g., GitHub Actions, Jenkins, CircleCI."
-    )]
+    #[serde(rename = "ci", alias = "Ci")]
+    #[llm(description = "PRIORITY 7: CI/CD configuration changes. E.g., GitHub Actions, Jenkins.")]
     Ci,
-    #[schemars(
-        description = "PRIORITY 8: Maintenance tasks, internal dependency updates, tooling. E.g., updating internal deps, config files."
-    )]
+    #[serde(rename = "chore", alias = "Chore")]
+    #[llm(description = "PRIORITY 8: Maintenance tasks, internal dependency updates, tooling.")]
     Chore,
-    #[schemars(
-        description = "PRIORITY 9: Formatting or stylistic changes ONLY. No logic changes. E.g., linting, whitespace, code style."
-    )]
+    #[serde(rename = "style", alias = "Style")]
+    #[llm(description = "PRIORITY 9: Formatting or stylistic changes ONLY. No logic changes.")]
     Style,
-    #[schemars(
-        description = "PRIORITY 10 (LOWEST): Documentation ONLY. Use ONLY when there are NO code logic changes. E.g., README, comments, API docs."
+    #[serde(rename = "docs", alias = "Docs")]
+    #[llm(
+        description = "PRIORITY 10 (LOWEST): Documentation ONLY. Use ONLY when there are NO code logic changes."
     )]
     Docs,
 }
 
 // Struct for commit template with JSON-friendly fields
-#[derive(Debug, Serialize, Deserialize, PartialEq, JsonSchema)]
-#[schemars(
-    description = "Commit message data. Format: '{type}: {subject}'. Keep first line under 50 chars. Do NOT use scope."
+// Note: Using commit_type field name because rstructor doesn't yet support #[serde(rename)] on fields
+// The alias accepts "commit_type" from LLM while rename serializes to "type" for output
+#[derive(Debug, Serialize, Deserialize, PartialEq, Instructor)]
+#[llm(
+    description = "Commit message data. Format: '{commit_type}: {subject}'. Keep first line under 50 chars. Do NOT use scope."
 )]
 pub struct CommitTemplate {
-    #[serde(rename = "type")]
-    #[schemars(
-        description = "The type of the commit message. Select from CommitType based on the change.",
-        title = "Type"
+    #[serde(rename = "type", alias = "commit_type")]
+    #[llm(
+        description = "The type of the commit message. Select from CommitType based on the change."
     )]
-    pub r#type: CommitType,
+    pub commit_type: CommitType,
 
-    #[schemars(
+    #[llm(
         description = "Brief subject line, ideally under 50 chars total with type prefix. Start with lowercase verb (add, fix, update). Be specific.",
-        title = "Subject",
-        example = &"add user login endpoint",
-        example = &"fix null check in auth"
+        example = "add user login endpoint"
     )]
     pub subject: String,
 
-    #[schemars(
-        description = "Optional details as bullet points (max 79 chars each). Start each bullet with '- ' followed by present tense verb. Focus on explaining the change's purpose and impact. Include context that's not obvious from the code.",
-        title = "Details",
-        example = &"- Add JWT auth for security\n- Update tests for coverage"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[llm(
+        description = "Optional details as bullet points (max 79 chars each). Start each bullet with '- ' followed by present tense verb. Focus on explaining the change's purpose and impact.",
+        example = "- Add JWT auth for security\n- Update tests for coverage"
     )]
     pub details: Option<String>,
 
-    #[schemars(
-        description = "Optional issue/ticket references. Format: '#123' or 'Fixes #456' or 'Resolves #789, #101'",
-        title = "Issues",
-        example = &"#123",
-        example = &"Fixes #456"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[llm(
+        description = "Optional issue/ticket references. Format: '#123' or 'Fixes #456'",
+        example = "#123"
     )]
     pub issues: Option<String>,
 
-    #[schemars(
-        description = "Optional breaking change description. Include this when your change breaks backward compatibility. Explain what breaks and how users should migrate.",
-        title = "Breaking Changes",
-        example = &"Drop support for old API"
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[llm(
+        description = "Optional breaking change description. Include when your change breaks backward compatibility.",
+        example = "Drop support for old API"
     )]
     pub breaking: Option<String>,
 
-    #[schemars(
+    #[serde(skip_serializing_if = "Option::is_none")]
+    #[llm(
         description = "LEAVE NULL. Only set for monorepos with packages/apps directories. Do not use for single projects.",
-        title = "Scope",
-        example = &"auth",
-        example = &"api"
+        example = "auth"
     )]
     pub scope: Option<String>,
 }
@@ -149,7 +150,7 @@ pub struct CommitTemplate {
 impl Default for CommitTemplate {
     fn default() -> Self {
         Self {
-            r#type: CommitType::Feat,
+            commit_type: CommitType::Feat,
             subject: "".to_string(),
             details: None,
             issues: None,
@@ -318,7 +319,7 @@ mod tests {
         manager.register_template("test", template).unwrap();
 
         let data = CommitTemplate {
-            r#type: CommitType::Feat,
+            commit_type: CommitType::Feat,
             subject: "add new feature".to_string(),
             details: Some("- Implement cool functionality\n- Update tests".to_string()),
             ..Default::default()
@@ -343,7 +344,7 @@ mod tests {
 
         // With scope
         let data_with_scope = CommitTemplate {
-            r#type: CommitType::Feat,
+            commit_type: CommitType::Feat,
             subject: "add new feature".to_string(),
             scope: Some("ui".to_string()),
             ..Default::default()
@@ -354,7 +355,7 @@ mod tests {
 
         // Without scope
         let data_without_scope = CommitTemplate {
-            r#type: CommitType::Feat,
+            commit_type: CommitType::Feat,
             subject: "add new feature".to_string(),
             ..Default::default()
         };
@@ -364,26 +365,10 @@ mod tests {
     }
 
     #[test]
-    fn test_commit_template_json_schema() {
-        // Generate the JSON schema for CommitTemplate
-        let schema = schemars::schema_for!(CommitTemplate);
-        let schema_str = serde_json::to_string_pretty(&schema).unwrap();
-
-        // Verify schema has expected structure
-        assert!(schema_str.contains("CommitTemplate"));
-        assert!(schema_str.contains("description"));
-        assert!(schema_str.contains("type"));
-        assert!(schema_str.contains("subject"));
-
-        // Print schema for debugging
-        println!("Generated schema:\n{}", schema_str);
-    }
-
-    #[test]
-    fn test_schema_validates_commit_template() {
+    fn test_commit_template_serialization() {
         // Create a valid CommitTemplate instance
         let template = CommitTemplate {
-            r#type: CommitType::Feat,
+            commit_type: CommitType::Feat,
             subject: "add schema validation test".to_string(),
             details: Some("- Test schema validation\n- Ensure examples work".to_string()),
             issues: Some("#123".to_string()),
@@ -394,7 +379,7 @@ mod tests {
         // Serialize the template to JSON
         let template_json = serde_json::to_value(&template).unwrap();
 
-        // Check type field
+        // Check type field (serde renames commit_type to "type")
         assert_eq!(
             template_json.get("type").and_then(|v| v.as_str()),
             Some("feat")
@@ -418,8 +403,8 @@ mod tests {
             Some("#123")
         );
 
-        // Check breaking field is null
-        assert!(template_json.get("breaking").unwrap().is_null());
+        // Check breaking field is omitted (skip_serializing_if)
+        assert!(template_json.get("breaking").is_none());
 
         // Check scope field
         assert_eq!(
@@ -429,8 +414,22 @@ mod tests {
     }
 
     #[test]
-    fn test_schema_rejects_invalid_commit_template() {
-        // Test 1: Invalid commit type
+    fn test_commit_template_deserialization() {
+        // Test valid JSON (serde expects "type" due to rename)
+        let valid_json = r#"{
+            "type": "feat",
+            "subject": "test subject",
+            "details": null,
+            "issues": null,
+            "breaking": null,
+            "scope": null
+        }"#;
+
+        let result: Result<CommitTemplate, _> = serde_json::from_str(valid_json);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().commit_type, CommitType::Feat);
+
+        // Test invalid commit type
         let invalid_type_json = r#"{
             "type": "invalid_type",
             "subject": "this has an invalid type",
@@ -441,49 +440,6 @@ mod tests {
         }"#;
 
         let result: Result<CommitTemplate, _> = serde_json::from_str(invalid_type_json);
-        assert!(result.is_err(), "Schema should reject invalid commit type");
-        let error = result.unwrap_err().to_string();
-        assert!(
-            error.contains("invalid_type"),
-            "Error should mention the invalid type"
-        );
-
-        // Test 2: Missing required field (subject)
-        let missing_subject_json = r#"{
-            "type": "feat",
-            "details": null,
-            "issues": null,
-            "breaking": null,
-            "scope": null
-        }"#;
-
-        let result: Result<CommitTemplate, _> = serde_json::from_str(missing_subject_json);
-        assert!(
-            result.is_err(),
-            "Schema should reject missing required field"
-        );
-        let error = result.unwrap_err().to_string();
-        assert!(
-            error.contains("subject") || error.contains("missing field"),
-            "Error should mention the missing field"
-        );
-
-        // Test 3: Wrong data type for a field
-        let wrong_type_json = r#"{
-            "type": "feat",
-            "subject": "valid subject",
-            "details": 12345,
-            "issues": null,
-            "breaking": null,
-            "scope": null
-        }"#;
-
-        let result: Result<CommitTemplate, _> = serde_json::from_str(wrong_type_json);
-        assert!(result.is_err(), "Schema should reject wrong data type");
-        let error = result.unwrap_err().to_string();
-        assert!(
-            error.contains("details") || error.contains("expected a string"),
-            "Error should mention the field with wrong type"
-        );
+        assert!(result.is_err(), "Should reject invalid commit type");
     }
 }

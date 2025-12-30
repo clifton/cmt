@@ -195,9 +195,11 @@ git commit -F <(cmt -m)
 
 1. `cmt` gathers rich context: README excerpt, branch name, recent commits
 2. Analyzes staged changes to suggest commit type
-3. Sends full context + diff to the AI (optimized for Gemini's 1M token context)
+3. Sends full context + diff to the AI using [rstructor](https://github.com/clifton/rstructor) for structured output
 4. Shows stats (tokens, time, estimated cost)
 5. You review and confirm (or regenerate with a hint)
+
+> **Built with [rstructor](https://github.com/clifton/rstructor)** - a Rust library for type-safe structured outputs from LLMs (similar to Python's Instructor).
 
 Example output:
 ```

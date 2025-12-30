@@ -1,7 +1,7 @@
 use cmt::template_mod::CommitTemplate;
-use schemars::schema_for;
+use rstructor::SchemaType;
 
 fn main() {
-    let schema = schema_for!(CommitTemplate);
-    println!("{}", serde_json::to_string_pretty(&schema).unwrap());
+    let schema = CommitTemplate::schema();
+    println!("{}", serde_json::to_string_pretty(&schema.schema).unwrap());
 }

@@ -1760,9 +1760,9 @@ dependencies = [
 
 [[package]]
 name = "rstructor"
-version = "0.2.6"
+version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0a8991a23df5c12ca6330badf9e850f5fb4eb1e642da5b319aa2a3009f4256a9"
+checksum = "e63cdc41bf0cf96282d695f2aeb4809bb4322b14e331abebc20a05cc7c80ab72"
 dependencies = [
  "async-trait",
  "chrono",
@@ -1779,9 +1779,9 @@ dependencies = [
 
 [[package]]
 name = "rstructor_derive"
-version = "0.2.6"
+version = "0.2.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "2b92158cd3e5ac73290c45e5a241a9dea6d857cca3562dd33bd38de72d3504e8"
+checksum = "a76c3f17f8550387a22e1032e0472600fe737b49e61c6a92dfb7b604044805c1"
 dependencies = [
  "proc-macro2",
  "quote",

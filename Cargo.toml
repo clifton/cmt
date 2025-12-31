@@ -43,9 +43,10 @@ rstructor = { version = "0.2", features = ["openai", "anthropic", "gemini"] }
 tokio = { version = "1", features = ["rt", "macros"] }
 
 # HTTP client for pricing (rstructor handles AI requests)
-reqwest = { version = "0.12", features = [
+reqwest = { version = "0.13", features = [
   "json",
-  "rustls-tls",
+  "query",
+  "default-tls",
 ], default-features = false }
 
 [dev-dependencies]

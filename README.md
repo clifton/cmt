@@ -201,6 +201,8 @@ git commit -F <(cmt -m)
 
 > **Built with [rstructor](https://github.com/clifton/rstructor)** - a Rust library for type-safe structured outputs from LLMs (similar to Python's Instructor).
 
+For detailed implementation documentation including diff assembly, file filtering, prompt construction, and all default parameters, see [METHODOLOGY.md](METHODOLOGY.md).
+
 Example output:
 ```
 Staged: 3 files +150 -42

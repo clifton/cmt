@@ -193,8 +193,8 @@ async fn main() {
     let cli_config = Config::from_args(&args);
     config.merge(&cli_config);
 
-    // Open git repository
-    let repo = match Repository::open(".") {
+    // Open git repository (discover searches up the directory tree)
+    let repo = match Repository::discover(".") {
         Ok(repo) => repo,
         Err(e) => {
             eprintln!("{}", "Error opening git repository:".red().bold());

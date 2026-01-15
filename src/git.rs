@@ -637,4 +637,29 @@ mod tests {
         assert_eq!(total_adds, staged.stats.insertions);
         assert_eq!(total_dels, staged.stats.deletions);
     }
+
+    #[test]
+    fn test_discover_repo_from_subdirectory() {
+        let (temp_dir, repo) = setup_test_repo();
+
+        // Create a nested subdirectory structure
+        let subdir = temp_dir.path().join("src").join("deeply").join("nested");
+        std::fs::create_dir_all(&subdir).unwrap();
+
+        // Stage a file so we have something to work with
+        create_and_stage_file(&repo, "test.txt", "Hello from root");
+
+        // Discover the repo from the nested subdirectory
+        let discovered = Repository::discover(&subdir).unwrap();
+
+        // Verify we found the same repository (compare workdir paths)
+        assert_eq!(
+            discovered.workdir().unwrap().canonicalize().unwrap(),
+            repo.workdir().unwrap().canonicalize().unwrap()
+        );
+
+        // Verify we can still access staged changes from the discovered repo
+        let staged = get_staged_changes(&discovered, 0, 100, 300).unwrap();
+        assert!(staged.diff_text.contains("Hello from root"));
+    }
 }

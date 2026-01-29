@@ -96,6 +96,10 @@ pub struct Args {
     #[arg(long, short = 'y')]
     pub yes: bool,
 
+    /// Skip pre-commit and commit-msg hooks
+    #[arg(long, short = 'n')]
+    pub no_verify: bool,
+
     /// Reasoning depth for AI models (none=fastest, minimal, low, high)
     #[arg(long, default_value = "low", value_parser = ["none", "minimal", "low", "high"])]
     pub thinking: String,
@@ -160,6 +164,19 @@ mod tests {
 
         let args = Args::new_from(["cmt", "-y"].iter().map(ToString::to_string));
         assert!(args.yes);
+    }
+
+    #[test]
+    fn test_no_verify_flag() {
+        let args = Args::new_from(["cmt", "--no-verify"].iter().map(ToString::to_string));
+        assert!(args.no_verify);
+
+        let args = Args::new_from(["cmt", "-n"].iter().map(ToString::to_string));
+        assert!(args.no_verify);
+
+        // Default should be false
+        let args = Args::new_from(["cmt"].iter().map(ToString::to_string));
+        assert!(!args.no_verify);
     }
 
     #[test]

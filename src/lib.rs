@@ -6,12 +6,15 @@ pub use crate::git::{
 
 mod ai;
 mod analysis;
+mod commit;
 mod config;
 mod git;
 pub mod pricing;
 mod progress;
 mod prompts;
 mod templates;
+
+pub use commit::{create_commit, CommitError, CommitOptions, CommitResult};
 
 pub use pricing::PricingCache;
 pub use progress::Spinner;

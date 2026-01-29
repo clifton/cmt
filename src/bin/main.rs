@@ -4,7 +4,8 @@ use cmt::config_mod::{file as config_file, Config};
 use cmt::pricing::{self, PricingCache};
 use cmt::template_mod::TemplateManager;
 use cmt::{
-    analyze_diff, generate_commit_message, get_current_branch, get_readme_excerpt, Args, Spinner,
+    analyze_diff, create_commit, generate_commit_message, get_current_branch, get_readme_excerpt,
+    Args, CommitError, CommitOptions, Spinner,
 };
 use colored::*;
 use dotenv::dotenv;
@@ -433,15 +434,28 @@ async fn main() {
 
                 match action {
                     CommitAction::Commit => {
-                        // Create the commit using git2
-                        match create_commit(&repo, &current_message) {
-                            Ok(oid) => {
+                        // Create the commit using git commit (respects hooks)
+                        let options = CommitOptions {
+                            no_verify: current_args.no_verify,
+                        };
+                        match create_commit(&repo, &current_message, &options) {
+                            Ok(result) => {
                                 println!(
                                     "{}",
-                                    format!("✓ Created commit: {}", &oid.to_string()[..7])
+                                    format!("✓ Created commit: {}", &result.oid[..7])
                                         .green()
                                         .bold()
                                 );
+                            }
+                            Err(CommitError::PreCommitFailed) => {
+                                eprintln!("{}", "Pre-commit hook failed.".red().bold());
+                                eprintln!("{}", "Use --no-verify (-n) to skip hooks.".yellow());
+                                process::exit(1);
+                            }
+                            Err(CommitError::CommitMsgFailed) => {
+                                eprintln!("{}", "Commit-msg hook failed.".red().bold());
+                                eprintln!("{}", "Use --no-verify (-n) to skip hooks.".yellow());
+                                process::exit(1);
                             }
                             Err(e) => {
                                 eprintln!("{}", "Error creating commit:".red().bold());
@@ -503,33 +517,4 @@ async fn main() {
             }
         }
     }
-}
-
-/// Create a commit with the given message
-fn create_commit(repo: &Repository, message: &str) -> Result<git2::Oid, git2::Error> {
-    let mut index = repo.index()?;
-    let tree_id = index.write_tree()?;
-    let tree = repo.find_tree(tree_id)?;
-
-    let signature = repo.signature()?;
-
-    // Get parent commit (if any)
-    let parents = match repo.head() {
-        Ok(head) => {
-            let parent = head.peel_to_commit()?;
-            vec![parent]
-        }
-        Err(_) => vec![], // Initial commit
-    };
-
-    let parent_refs: Vec<&git2::Commit> = parents.iter().collect();
-
-    repo.commit(
-        Some("HEAD"),
-        &signature,
-        &signature,
-        message,
-        &tree,
-        &parent_refs,
-    )
 }

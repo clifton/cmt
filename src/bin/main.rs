@@ -527,13 +527,21 @@ async fn main() {
                                         .bold()
                                 );
                             }
-                            Err(CommitError::PreCommitFailed) => {
+                            Err(err @ CommitError::PreCommitFailed { .. }) => {
                                 eprintln!("{}", "Pre-commit hook failed.".red().bold());
+                                if let Some(output) = err.hook_output() {
+                                    eprintln!();
+                                    eprintln!("{}", output);
+                                }
                                 eprintln!("{}", "Use --no-verify (-n) to skip hooks.".yellow());
                                 process::exit(1);
                             }
-                            Err(CommitError::CommitMsgFailed) => {
+                            Err(err @ CommitError::CommitMsgFailed { .. }) => {
                                 eprintln!("{}", "Commit-msg hook failed.".red().bold());
+                                if let Some(output) = err.hook_output() {
+                                    eprintln!();
+                                    eprintln!("{}", output);
+                                }
                                 eprintln!("{}", "Use --no-verify (-n) to skip hooks.".yellow());
                                 process::exit(1);
                             }

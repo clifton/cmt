@@ -12,9 +12,9 @@ use tempfile::NamedTempFile;
 #[derive(Debug)]
 pub enum CommitError {
     /// The pre-commit hook failed (exit code 1).
-    PreCommitFailed,
+    PreCommitFailed { output: String },
     /// The commit-msg hook failed.
-    CommitMsgFailed,
+    CommitMsgFailed { output: String },
     /// A general git error occurred.
     GitError(String),
     /// Failed to create or write to the temp file.
@@ -26,8 +26,8 @@ pub enum CommitError {
 impl std::fmt::Display for CommitError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            CommitError::PreCommitFailed => write!(f, "pre-commit hook failed"),
-            CommitError::CommitMsgFailed => write!(f, "commit-msg hook failed"),
+            CommitError::PreCommitFailed { .. } => write!(f, "pre-commit hook failed"),
+            CommitError::CommitMsgFailed { .. } => write!(f, "commit-msg hook failed"),
             CommitError::GitError(msg) => write!(f, "git error: {}", msg),
             CommitError::TempFileError(e) => write!(f, "temp file error: {}", e),
             CommitError::ParseError => write!(f, "failed to parse commit output"),
@@ -36,6 +36,23 @@ impl std::fmt::Display for CommitError {
 }
 
 impl std::error::Error for CommitError {}
+
+impl CommitError {
+    /// Return captured hook output when available.
+    pub fn hook_output(&self) -> Option<&str> {
+        match self {
+            CommitError::PreCommitFailed { output } | CommitError::CommitMsgFailed { output } => {
+                let trimmed = output.trim();
+                if trimmed.is_empty() {
+                    None
+                } else {
+                    Some(trimmed)
+                }
+            }
+            _ => None,
+        }
+    }
+}
 
 /// Options for creating a commit.
 #[derive(Debug, Default)]
@@ -49,6 +66,12 @@ pub struct CommitOptions {
 pub struct CommitResult {
     /// The commit object ID (SHA).
     pub oid: String,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum HookFailureKind {
+    PreCommit,
+    CommitMsg,
 }
 
 /// Create a commit with the given message, respecting git hooks.
@@ -92,28 +115,21 @@ pub fn create_commit(
         let stderr = String::from_utf8_lossy(&output.stderr);
         let stdout = String::from_utf8_lossy(&output.stdout);
         let combined = format!("{}{}", stdout, stderr);
+        let combined_trimmed = combined.trim().to_string();
 
-        // Check for hook failures
-        // Git typically exits with code 1 for hook failures
-        if let Some(code) = output.status.code() {
-            if code == 1 {
-                // Try to determine which hook failed from the output
-                let lower = combined.to_lowercase();
-                if lower.contains("pre-commit") {
-                    return Err(CommitError::PreCommitFailed);
-                }
-                if lower.contains("commit-msg") {
-                    return Err(CommitError::CommitMsgFailed);
-                }
-                // If no specific hook mentioned but exit code 1, likely pre-commit
-                // since it runs first
-                if !lower.contains("nothing to commit") && !lower.contains("no changes") {
-                    return Err(CommitError::PreCommitFailed);
-                }
-            }
+        // Check for hook failures.
+        if let Some(failure_kind) = detect_hook_failure(&combined, output.status.code()) {
+            return match failure_kind {
+                HookFailureKind::PreCommit => Err(CommitError::PreCommitFailed {
+                    output: combined_trimmed,
+                }),
+                HookFailureKind::CommitMsg => Err(CommitError::CommitMsgFailed {
+                    output: combined_trimmed,
+                }),
+            };
         }
 
-        return Err(CommitError::GitError(combined.trim().to_string()));
+        return Err(CommitError::GitError(combined_trimmed));
     }
 
     // Parse the commit hash from output
@@ -150,9 +166,54 @@ fn parse_commit_hash(output: &str) -> Option<String> {
     None
 }
 
+fn detect_hook_failure(output: &str, exit_code: Option<i32>) -> Option<HookFailureKind> {
+    // Git typically exits with code 1 for hook failures.
+    if exit_code != Some(1) {
+        return None;
+    }
+
+    let lower = output.to_lowercase();
+    if lower.contains("pre-commit") {
+        return Some(HookFailureKind::PreCommit);
+    }
+    if lower.contains("commit-msg") {
+        return Some(HookFailureKind::CommitMsg);
+    }
+
+    // If no specific hook is mentioned but exit code is 1, it's likely pre-commit.
+    if !lower.contains("nothing to commit") && !lower.contains("no changes") {
+        return Some(HookFailureKind::PreCommit);
+    }
+
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    use std::fs;
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
+    #[cfg(unix)]
+    use std::path::Path;
+    #[cfg(unix)]
+    use tempfile::tempdir;
+
+    #[cfg(unix)]
+    fn run_git(repo_path: &Path, args: &[&str]) {
+        let output = Command::new("git")
+            .current_dir(repo_path)
+            .args(args)
+            .output()
+            .expect("failed to run git");
+        assert!(
+            output.status.success(),
+            "git {:?} failed: {}",
+            args,
+            String::from_utf8_lossy(&output.stderr)
+        );
+    }
 
     #[test]
     fn test_parse_commit_hash_normal() {
@@ -185,5 +246,97 @@ mod tests {
             parse_commit_hash(output),
             Some("abcdef1234567890abcdef1234567890abcdef12".to_string())
         );
+    }
+
+    #[test]
+    fn test_detect_hook_failure_pre_commit_by_name() {
+        let output = "pre-commit hook failed";
+        assert_eq!(
+            detect_hook_failure(output, Some(1)),
+            Some(HookFailureKind::PreCommit)
+        );
+    }
+
+    #[test]
+    fn test_detect_hook_failure_commit_msg_by_name() {
+        let output = "commit-msg hook failed";
+        assert_eq!(
+            detect_hook_failure(output, Some(1)),
+            Some(HookFailureKind::CommitMsg)
+        );
+    }
+
+    #[test]
+    fn test_detect_hook_failure_pre_commit_fallback() {
+        let output = "lint failed";
+        assert_eq!(
+            detect_hook_failure(output, Some(1)),
+            Some(HookFailureKind::PreCommit)
+        );
+    }
+
+    #[test]
+    fn test_detect_hook_failure_not_hook_failure_nothing_to_commit() {
+        let output = "nothing to commit, working tree clean";
+        assert_eq!(detect_hook_failure(output, Some(1)), None);
+    }
+
+    #[test]
+    fn test_detect_hook_failure_non_hook_exit_code() {
+        let output = "pre-commit hook failed";
+        assert_eq!(detect_hook_failure(output, Some(128)), None);
+    }
+
+    #[test]
+    fn test_hook_output_accessor() {
+        let err = CommitError::PreCommitFailed {
+            output: "  lint failed  ".to_string(),
+        };
+        assert_eq!(err.hook_output(), Some("lint failed"));
+    }
+
+    #[test]
+    fn test_hook_output_accessor_empty() {
+        let err = CommitError::CommitMsgFailed {
+            output: "   ".to_string(),
+        };
+        assert_eq!(err.hook_output(), None);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_create_commit_returns_pre_commit_output() {
+        let temp_dir = tempdir().expect("failed to create temp dir");
+        let repo_path = temp_dir.path();
+
+        run_git(repo_path, &["init"]);
+        run_git(repo_path, &["config", "user.name", "Test User"]);
+        run_git(repo_path, &["config", "user.email", "test@example.com"]);
+
+        fs::write(repo_path.join("file.txt"), "content\n").expect("failed to write staged file");
+        run_git(repo_path, &["add", "file.txt"]);
+
+        let hook_path = repo_path.join(".git/hooks/pre-commit");
+        fs::write(
+            &hook_path,
+            "#!/bin/sh\necho 'lint failed: trailing whitespace' >&2\nexit 1\n",
+        )
+        .expect("failed to write pre-commit hook");
+        let mut perms = fs::metadata(&hook_path)
+            .expect("failed to stat pre-commit hook")
+            .permissions();
+        perms.set_mode(0o755);
+        fs::set_permissions(&hook_path, perms).expect("failed to chmod pre-commit hook");
+
+        let repo = Repository::open(repo_path).expect("failed to open test repo");
+        let error = create_commit(&repo, "test commit", &CommitOptions::default())
+            .expect_err("expected failure");
+
+        match error {
+            CommitError::PreCommitFailed { output } => {
+                assert!(output.contains("lint failed: trailing whitespace"));
+            }
+            other => panic!("expected pre-commit failure, got {other:?}"),
+        }
     }
 }

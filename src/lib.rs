@@ -6,6 +6,7 @@ pub use crate::git::{
 
 mod ai;
 mod analysis;
+mod cmtignore;
 mod commit;
 mod config;
 mod git;
@@ -13,6 +14,8 @@ pub mod pricing;
 mod progress;
 mod prompts;
 mod templates;
+
+pub use cmtignore::{append_to_cmtignore, load_cmtignore};
 
 pub use commit::{create_commit, CommitError, CommitOptions, CommitResult};
 

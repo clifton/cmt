@@ -57,6 +57,7 @@ This document describes how `cmt` assembles git diff context and sends it to the
 | `context_lines` | 20 | Lines of context around changes in unified diff |
 | `max_lines_per_file` | 2000 | Maximum diff lines per file before truncation |
 | `max_line_width` | 500 | Maximum characters per line before truncation |
+| `max_file_lines` | 5000 | Maximum total line changes per file before prompting to add to .cmtignore |
 
 ### Process
 
@@ -75,6 +76,8 @@ pub struct DiffStats {
     pub insertions: usize,
     pub deletions: usize,
     pub file_changes: Vec<(String, usize, usize)>,  // (filename, adds, dels)
+    pub skipped_files: Vec<(String, usize, usize)>, // Files exceeding max_file_lines threshold
+    pub ignored_files: Vec<(String, usize, usize)>, // Files matched by .cmtignore
     pub has_unstaged: bool,
 }
 ```
@@ -97,6 +100,44 @@ Files excluded from the diff sent to the LLM:
 
 ### Build Artifacts
 - Paths starting with: `dist/`, `build/`
+
+### .cmtignore File
+
+**Source:** `src/cmtignore.rs`
+
+You can create a `.cmtignore` file in your repository root to permanently exclude files from commit message generation. This is useful for large generated files (migrations, schemas, etc.) that would overwhelm the LLM context.
+
+**Format:**
+```
+# Lines starting with # are comments
+# Glob patterns, one per line
+
+migrations/target_schema.sql
+*.generated.ts
+dist/**
+```
+
+**Supported patterns:**
+- Exact paths: `migrations/schema.sql`
+- Single glob (`*`): `*.sql` matches files in current directory only
+- Double glob (`**`): `dist/**` matches all files recursively, `**/*.tsx` matches .tsx files at any depth
+
+When a file exceeds the `max_file_lines` threshold (default: 5000 total line changes), `cmt` will prompt you to add it to `.cmtignore` for future runs:
+
+```
+The following files exceed 5000 lines changed:
+  - migrations/target_schema.sql (102K lines)
+
+Would you like to add them to .cmtignore? [Y/n]
+```
+
+**Important:** Files in `.cmtignore` are only skipped for LLM analysis - they are still committed normally. The diff statistics (file count, insertions, deletions) include all files. Skipped files are shown dimmed with a `~` marker:
+
+```
+Staged: 12 files +102850 -9883
+  src/main.rs                                   +45  -10
+  migrations/target_schema.sql                  +102607 -9738  ~
+```
 
 ## 3. Semantic Analysis
 
@@ -537,6 +578,7 @@ Custom templates stored in `~/.config/cmt/templates/*.hbs`
 | `context_lines` | 20 | `src/config/defaults.rs` |
 | `max_lines_per_file` | 2000 | `src/config/defaults.rs` |
 | `max_line_width` | 500 | `src/config/defaults.rs` |
+| `max_file_lines` | 5000 | `src/config/defaults.rs` |
 | `temperature` | 0.3 | `src/ai/mod.rs` |
 | `thinking` | `low` | `src/config/cli.rs` |
 | `provider` | `gemini` | `src/config/defaults.rs` |
@@ -552,6 +594,7 @@ Custom templates stored in `~/.config/cmt/templates/*.hbs`
 |-----------|--------|
 | >100 files OR >20k changes | Reduce context to 8-15 lines, cap 500 lines/file |
 | >150 files OR >50k changes | Skip recent commits context entirely |
+| Single file >5000 line changes | Prompt to add to `.cmtignore` |
 
 ### Token Budget
 

@@ -46,6 +46,7 @@ pub struct Config {
     pub context_lines: u32,
     pub max_lines_per_file: usize,
     pub max_line_width: usize,
+    pub max_file_lines: usize,
 
     // AI provider options
     pub provider: String,
@@ -72,6 +73,7 @@ impl Default for Config {
             context_lines: defaults::CONTEXT_LINES,
             max_lines_per_file: defaults::MAX_LINES_PER_FILE,
             max_line_width: defaults::MAX_LINE_WIDTH,
+            max_file_lines: defaults::MAX_FILE_LINES,
             provider: defaults::DEFAULT_PROVIDER.to_string(),
             model: None,
             temperature: None,
@@ -153,6 +155,9 @@ impl Config {
         if other.max_line_width != defaults::MAX_LINE_WIDTH {
             self.max_line_width = other.max_line_width;
         }
+        if other.max_file_lines != defaults::MAX_FILE_LINES {
+            self.max_file_lines = other.max_file_lines;
+        }
         if other.provider != defaults::DEFAULT_PROVIDER {
             self.provider = other.provider.clone();
         }
@@ -185,6 +190,7 @@ impl Config {
             context_lines: args.context_lines,
             max_lines_per_file: args.max_lines_per_file,
             max_line_width: args.max_line_width,
+            max_file_lines: args.max_file_lines,
             provider: args.provider.clone(),
             model: args.model.clone(),
             temperature: args.temperature,

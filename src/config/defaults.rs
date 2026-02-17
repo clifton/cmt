@@ -7,6 +7,10 @@ pub const SHOW_RAW_DIFF: bool = false;
 pub const CONTEXT_LINES: u32 = 20; // Full function context - Gemini Flash supports 1M tokens
 pub const MAX_LINES_PER_FILE: usize = 2000; // Allow large files - we have token budget
 pub const MAX_LINE_WIDTH: usize = 500; // Allow wider lines for better context
+pub const MAX_FILE_LINES: usize = 5000; // Threshold for prompting to add to .cmtignore
+
+// Cmtignore defaults
+pub const CMTIGNORE_FILENAME: &str = ".cmtignore";
 
 // AI provider defaults
 pub const DEFAULT_PROVIDER: &str = "gemini";
@@ -48,6 +52,7 @@ show_raw_diff = {}
 context_lines = {}
 max_lines_per_file = {}
 max_line_width = {}
+max_file_lines = {}
 
 # AI provider options
 provider = "{}"  # Options: {}
@@ -70,6 +75,7 @@ recent_commits_count = {}
         CONTEXT_LINES,
         MAX_LINES_PER_FILE,
         MAX_LINE_WIDTH,
+        MAX_FILE_LINES,
         DEFAULT_PROVIDER,
         AVAILABLE_PROVIDERS.join(", "),
         DEFAULT_CLAUDE_MODEL,

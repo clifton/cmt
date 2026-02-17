@@ -1,7 +1,10 @@
 use colored::*;
 use git2::{Error as GitError, Repository, Sort};
 use std::cmp;
+use std::collections::HashSet;
 use std::path::Path;
+
+use crate::cmtignore::matches_pattern;
 
 /// Stats about staged changes for display
 #[derive(Debug, Clone)]
@@ -10,6 +13,8 @@ pub struct DiffStats {
     pub insertions: usize,
     pub deletions: usize,
     pub file_changes: Vec<(String, usize, usize)>, // (filename, adds, dels)
+    pub skipped_files: Vec<(String, usize, usize)>, // Files exceeding max_file_lines threshold
+    pub ignored_files: Vec<(String, usize, usize)>, // Files matched by .cmtignore
     pub has_unstaged: bool,
 }
 
@@ -29,10 +34,48 @@ impl DiffStats {
             println!();
         }
 
-        // Print compact header
+        // Collect all files for calculating column widths
+        let all_files: Vec<_> = self
+            .file_changes
+            .iter()
+            .chain(self.ignored_files.iter())
+            .chain(self.skipped_files.iter())
+            .collect();
+
+        // Calculate column widths
+        let max_name_len = all_files.iter().map(|(f, _, _)| f.len()).max().unwrap_or(0);
+        let max_adds = all_files
+            .iter()
+            .map(|(_, a, _)| *a)
+            .max()
+            .unwrap_or(0)
+            .max(self.insertions);
+        let max_dels = all_files
+            .iter()
+            .map(|(_, _, d)| *d)
+            .max()
+            .unwrap_or(0)
+            .max(self.deletions);
+
+        // Calculate digit widths for alignment
+        let adds_width = format!("{}", max_adds).len();
+        let dels_width = format!("{}", max_dels).len();
+
+        // Print header with +/- aligned to file columns
+        // Header prefix: "Staged: N file(s) "
+        let header_prefix = format!(
+            "Staged: {} file{} ",
+            self.files_changed,
+            if self.files_changed == 1 { "" } else { "s" }
+        );
+        // File column width: "  " (indent) + filename + 4 spaces padding
+        let file_col_width = 2 + max_name_len + 4;
+        // Padding needed to align header + with file + column
+        let header_pad = file_col_width.saturating_sub(header_prefix.len());
+
+        print!("{}", "Staged:".blue());
         print!(
-            "{} {} ",
-            "Staged:".blue(),
+            " {} ",
             format!(
                 "{} file{}",
                 self.files_changed,
@@ -40,34 +83,88 @@ impl DiffStats {
             )
             .white()
         );
-        if self.insertions > 0 {
-            print!("{} ", format!("+{}", self.insertions).green());
-        }
-        if self.deletions > 0 {
-            print!("{}", format!("-{}", self.deletions).red());
-        }
-        println!();
+        // Align + column: header_pad spaces + adds_width + 1 for the '+' sign
+        // Pad the string first, then colorize (ANSI codes break format width)
+        print!(
+            "{}",
+            format!("{:>width$}", format!("+{}", self.insertions), width = header_pad + adds_width + 1).green()
+        );
+        // 3 spaces between + and - columns (print separately to avoid ANSI interference)
+        print!("   ");
+        println!(
+            "{}",
+            format!("{:>width$}", format!("-{}", self.deletions), width = dels_width + 1).red()
+        );
 
-        // Print file list (compact)
-        let max_len = self
-            .file_changes
-            .iter()
-            .map(|(f, _, _)| f.len())
-            .max()
-            .unwrap_or(0);
-
+        // Print regular file list
         for (file, adds, dels) in &self.file_changes {
-            print!("  {:<width$}", file.white(), width = max_len + 2);
+            print!("  {:<width$}", file.white(), width = max_name_len + 4);
             if *adds > 0 {
-                print!("{}", format!("+{:<3}", adds).green());
+                print!(
+                    "{}",
+                    format!("{:>width$}", format!("+{}", adds), width = adds_width + 1).green()
+                );
             } else {
-                print!("    ");
+                print!("{:>width$}", "", width = adds_width + 1);
             }
             if *dels > 0 {
-                print!("{}", format!("-{}", dels).red());
+                // Print spacing separately to avoid ANSI code interference
+                print!("   ");
+                println!(
+                    "{}",
+                    format!("{:>width$}", format!("-{}", dels), width = dels_width + 1).red()
+                );
+            } else {
+                println!();
             }
-            println!();
         }
+
+        // Print ignored files (auto-skipped + .cmtignore) - dimmed with ~ marker
+        for (file, adds, dels) in &self.ignored_files {
+            print!("  {:<width$}", file.dimmed(), width = max_name_len + 4);
+            if *adds > 0 {
+                print!(
+                    "{}",
+                    format!("{:>width$}", format!("+{}", adds), width = adds_width + 1).dimmed()
+                );
+            } else {
+                print!("{:>width$}", "", width = adds_width + 1);
+            }
+            if *dels > 0 {
+                print!("   ");
+                print!(
+                    "{}",
+                    format!("{:>width$}", format!("-{}", dels), width = dels_width + 1).dimmed()
+                );
+            } else {
+                print!("{:>width$}", "", width = dels_width + 4);
+            }
+            println!("{}", "  ~".dimmed());
+        }
+
+        // Print skipped files (exceeding threshold) - dimmed with ~ marker
+        for (file, adds, dels) in &self.skipped_files {
+            print!("  {:<width$}", file.dimmed(), width = max_name_len + 4);
+            if *adds > 0 {
+                print!(
+                    "{}",
+                    format!("{:>width$}", format!("+{}", adds), width = adds_width + 1).dimmed()
+                );
+            } else {
+                print!("{:>width$}", "", width = adds_width + 1);
+            }
+            if *dels > 0 {
+                print!("   ");
+                print!(
+                    "{}",
+                    format!("{:>width$}", format!("-{}", dels), width = dels_width + 1).dimmed()
+                );
+            } else {
+                print!("{:>width$}", "", width = dels_width + 4);
+            }
+            println!("{}", "  ~".dimmed());
+        }
+
         println!(); // Space before next section
     }
 }
@@ -190,6 +287,8 @@ pub fn get_staged_changes(
     context_lines: u32,
     max_lines_per_file: usize,
     max_line_width: usize,
+    max_file_lines: usize,
+    cmtignore_patterns: &[String],
 ) -> Result<StagedChanges, GitError> {
     let mut opts = git2::DiffOptions::new();
     opts.context_lines(context_lines);
@@ -210,11 +309,15 @@ pub fn get_staged_changes(
         .diff_tree_to_index(Some(&tree), None, Some(&mut opts))
         .map_err(|e| GitError::from_str(&format!("Failed to get repository diff: {}", e)))?;
 
-    // Get stats in the same pass
-    let git_stats = diff.stats()?;
+    // Get stats (for reference, though we calculate our own for accurate filtering)
+    let _git_stats = diff.stats()?;
 
     // Collect per-file stats using Patch API for accurate line counts
+    // Separate into regular files, ignored files, and skipped files
     let mut file_changes: Vec<(String, usize, usize)> = Vec::new();
+    let mut ignored_files: Vec<(String, usize, usize)> = Vec::new();
+    let mut skipped_files: Vec<(String, usize, usize)> = Vec::new();
+
     for delta_idx in 0..diff.deltas().len() {
         if let Ok(Some(patch)) = git2::Patch::from_diff(&diff, delta_idx) {
             let file_path = patch
@@ -225,20 +328,57 @@ pub fn get_staged_changes(
                 .map(|p| p.to_string_lossy().to_string())
                 .unwrap_or_default();
 
+            if file_path.is_empty() {
+                continue;
+            }
+
             // line_stats returns (context_lines, additions, deletions)
             let (_, additions, deletions) = patch.line_stats().unwrap_or((0, 0, 0));
+            let total_lines = additions + deletions;
 
-            if !file_path.is_empty() {
+            // Check if file is auto-skipped (lock files, images, build artifacts)
+            let file_path_obj = Path::new(&file_path);
+            let is_auto_skipped = is_skippable(file_path_obj);
+
+            // Check if file matches any .cmtignore pattern
+            let is_ignored = cmtignore_patterns
+                .iter()
+                .any(|pattern| matches_pattern(&file_path, pattern));
+
+            if is_auto_skipped || is_ignored {
+                // Auto-skipped and .cmtignore files go to ignored_files
+                ignored_files.push((file_path, additions, deletions));
+            } else if max_file_lines > 0 && total_lines > max_file_lines {
+                // File exceeds threshold (only check if threshold > 0)
+                skipped_files.push((file_path, additions, deletions));
+            } else {
                 file_changes.push((file_path, additions, deletions));
             }
         }
     }
 
+    // Calculate total insertions/deletions across ALL files (including ignored/skipped)
+    let total_insertions: usize = file_changes
+        .iter()
+        .chain(ignored_files.iter())
+        .chain(skipped_files.iter())
+        .map(|(_, a, _)| a)
+        .sum();
+    let total_deletions: usize = file_changes
+        .iter()
+        .chain(ignored_files.iter())
+        .chain(skipped_files.iter())
+        .map(|(_, _, d)| d)
+        .sum();
+    let total_files = file_changes.len() + ignored_files.len() + skipped_files.len();
+
     let stats = DiffStats {
-        files_changed: git_stats.files_changed(),
-        insertions: git_stats.insertions(),
-        deletions: git_stats.deletions(),
+        files_changed: total_files,
+        insertions: total_insertions,
+        deletions: total_deletions,
         file_changes,
+        skipped_files,
+        ignored_files,
         has_unstaged: has_unstaged_changes(repo).unwrap_or(false),
     };
 
@@ -266,6 +406,14 @@ pub fn get_staged_changes(
         diff
     };
 
+    // Build set of files to exclude from diff text (ignored + skipped)
+    let excluded_files: HashSet<String> = stats
+        .ignored_files
+        .iter()
+        .chain(stats.skipped_files.iter())
+        .map(|(f, _, _)| f.clone())
+        .collect();
+
     // Build diff text
     let mut diff_str = String::new();
     let mut line_count = 0;
@@ -276,8 +424,16 @@ pub fn get_staged_changes(
             .new_file()
             .path()
             .unwrap_or_else(|| std::path::Path::new(""));
+
+        // Skip .lock files and other auto-skippable files
         if is_skippable(file_path) {
-            return true; // Skip .lock files
+            return true;
+        }
+
+        // Skip files that are ignored or exceed threshold
+        let file_path_str = file_path.to_string_lossy();
+        if excluded_files.contains(file_path_str.as_ref()) {
+            return true;
         }
 
         if line_count < effective_max_lines_per_file {
@@ -370,7 +526,7 @@ mod tests {
     #[test]
     fn test_get_staged_changes_empty_repo() {
         let (_temp_dir, repo) = setup_test_repo();
-        let result = get_staged_changes(&repo, 0, 100, 300);
+        let result = get_staged_changes(&repo, 0, 100, 300, 0, &[]);
         assert!(result.is_err());
         assert_eq!(
             result.unwrap_err().message(),
@@ -385,7 +541,7 @@ mod tests {
         // Create and stage a new file
         create_and_stage_file(&repo, "test.txt", "Hello, World!");
 
-        let staged = get_staged_changes(&repo, 0, 100, 300).unwrap();
+        let staged = get_staged_changes(&repo, 0, 100, 300, 0, &[]).unwrap();
         assert!(staged.diff_text.contains("Hello, World!"));
     }
 
@@ -400,7 +556,7 @@ mod tests {
         // Modify and stage the file
         create_and_stage_file(&repo, "test.txt", "Modified content");
 
-        let staged = get_staged_changes(&repo, 0, 100, 300).unwrap();
+        let staged = get_staged_changes(&repo, 0, 100, 300, 0, &[]).unwrap();
         assert!(staged.diff_text.contains("Initial content"));
         assert!(staged.diff_text.contains("Modified content"));
     }
@@ -442,7 +598,7 @@ mod tests {
         create_and_stage_file(&repo, "new-staged.txt", "New staged content");
 
         // Should succeed and detect unstaged changes
-        let result = get_staged_changes(&repo, 3, 100, 300).unwrap();
+        let result = get_staged_changes(&repo, 3, 100, 300, 0, &[]).unwrap();
         assert!(result.stats.has_unstaged);
     }
 
@@ -456,12 +612,21 @@ mod tests {
         // Create and stage a regular file
         create_and_stage_file(&repo, "test.txt", "This is a regular file.");
 
-        let staged = get_staged_changes(&repo, 0, 100, 300).unwrap();
+        let staged = get_staged_changes(&repo, 0, 100, 300, 0, &[]).unwrap();
 
-        // Assert that the .lock file content is not in the diff
+        // Lock file should be in ignored_files (auto-skipped)
+        assert_eq!(staged.stats.ignored_files.len(), 1);
+        assert_eq!(staged.stats.ignored_files[0].0, "test.lock");
+
+        // Regular file should be in file_changes
+        assert_eq!(staged.stats.file_changes.len(), 1);
+        assert_eq!(staged.stats.file_changes[0].0, "test.txt");
+
+        // Total stats should include both files
+        assert_eq!(staged.stats.files_changed, 2);
+
+        // Diff text (sent to LLM) should only contain regular file
         assert!(!staged.diff_text.contains("This is a lock file."));
-
-        // Assert that the regular file content is in the diff
         assert!(staged.diff_text.contains("This is a regular file."));
     }
 
@@ -478,7 +643,7 @@ mod tests {
 
         // Set max_lines_per_file to 10 for testing
         let max_lines_per_file = 10;
-        let staged = get_staged_changes(&repo, 0, max_lines_per_file, 300).unwrap();
+        let staged = get_staged_changes(&repo, 0, max_lines_per_file, 300, 0, &[]).unwrap();
 
         // Assert that the diff output does not exceed the max_lines_per_file limit
         // Allow extra lines for headers and metadata
@@ -506,7 +671,7 @@ mod tests {
 
         // Set max_line_width to 100 for testing
         let max_line_width = 100;
-        let staged = get_staged_changes(&repo, 0, 100, max_line_width).unwrap();
+        let staged = get_staged_changes(&repo, 0, 100, max_line_width, 0, &[]).unwrap();
 
         // Assert that the line is truncated to max_line_width
         assert!(staged.diff_text.contains(&long_line[..max_line_width]));
@@ -521,7 +686,7 @@ mod tests {
         let content = "line1\nline2\nline3\nline4\nline5";
         create_and_stage_file(&repo, "test.txt", content);
 
-        let staged = get_staged_changes(&repo, 0, 100, 300).unwrap();
+        let staged = get_staged_changes(&repo, 0, 100, 300, 0, &[]).unwrap();
 
         // Check overall stats
         assert_eq!(staged.stats.files_changed, 1);
@@ -547,7 +712,7 @@ mod tests {
         // Modify file: change line2, add line4
         create_and_stage_file(&repo, "test.txt", "line1\nmodified\nline3\nline4");
 
-        let staged = get_staged_changes(&repo, 0, 100, 300).unwrap();
+        let staged = get_staged_changes(&repo, 0, 100, 300, 0, &[]).unwrap();
 
         // Check per-file stats - should have 2 insertions (modified, line4) and 1 deletion (line2)
         assert_eq!(staged.stats.file_changes.len(), 1);
@@ -571,7 +736,7 @@ mod tests {
         create_and_stage_file(&repo, "file2.txt", "x"); // -1
         create_and_stage_file(&repo, "file3.txt", "new1\nnew2\nnew3"); // +3
 
-        let staged = get_staged_changes(&repo, 0, 100, 300).unwrap();
+        let staged = get_staged_changes(&repo, 0, 100, 300, 0, &[]).unwrap();
 
         // Check overall stats
         assert_eq!(staged.stats.files_changed, 3);
@@ -627,7 +792,7 @@ mod tests {
         create_and_stage_file(&repo, "b.txt", "a"); // -2
         create_and_stage_file(&repo, "c.txt", "new\nfile"); // +2
 
-        let staged = get_staged_changes(&repo, 0, 100, 300).unwrap();
+        let staged = get_staged_changes(&repo, 0, 100, 300, 0, &[]).unwrap();
 
         // Sum up per-file stats
         let total_adds: usize = staged.stats.file_changes.iter().map(|(_, a, _)| a).sum();
@@ -659,7 +824,83 @@ mod tests {
         );
 
         // Verify we can still access staged changes from the discovered repo
-        let staged = get_staged_changes(&discovered, 0, 100, 300).unwrap();
+        let staged = get_staged_changes(&discovered, 0, 100, 300, 0, &[]).unwrap();
         assert!(staged.diff_text.contains("Hello from root"));
+    }
+
+    #[test]
+    fn test_cmtignore_pattern_matching() {
+        let (_temp_dir, repo) = setup_test_repo();
+
+        // Create and stage files
+        create_and_stage_file(&repo, "regular.txt", "regular content");
+        create_and_stage_file(&repo, "ignored.sql", "ignored content");
+
+        // Use cmtignore pattern to ignore .sql files
+        let patterns = vec!["*.sql".to_string()];
+        let staged = get_staged_changes(&repo, 0, 100, 300, 0, &patterns).unwrap();
+
+        // Regular file should be in file_changes
+        assert_eq!(staged.stats.file_changes.len(), 1);
+        assert_eq!(staged.stats.file_changes[0].0, "regular.txt");
+
+        // SQL file should be in ignored_files
+        assert_eq!(staged.stats.ignored_files.len(), 1);
+        assert_eq!(staged.stats.ignored_files[0].0, "ignored.sql");
+
+        // Total stats should include BOTH files (ignored files are only skipped for analysis)
+        assert_eq!(staged.stats.files_changed, 2);
+        assert_eq!(staged.stats.insertions, 2); // 1 line each
+
+        // Diff text (sent to LLM) should only contain regular file content
+        assert!(staged.diff_text.contains("regular content"));
+        assert!(!staged.diff_text.contains("ignored content"));
+    }
+
+    #[test]
+    fn test_max_file_lines_threshold() {
+        let (_temp_dir, repo) = setup_test_repo();
+
+        // Create a small file (under threshold)
+        create_and_stage_file(&repo, "small.txt", "line1\nline2\nline3");
+
+        // Create a large file (over threshold of 5 lines)
+        let large_content = (0..10).map(|i| format!("line{}", i)).collect::<Vec<_>>().join("\n");
+        create_and_stage_file(&repo, "large.txt", &large_content);
+
+        // Use max_file_lines of 5
+        let staged = get_staged_changes(&repo, 0, 100, 300, 5, &[]).unwrap();
+
+        // Small file should be in file_changes
+        assert_eq!(staged.stats.file_changes.len(), 1);
+        assert_eq!(staged.stats.file_changes[0].0, "small.txt");
+
+        // Large file should be in skipped_files
+        assert_eq!(staged.stats.skipped_files.len(), 1);
+        assert_eq!(staged.stats.skipped_files[0].0, "large.txt");
+
+        // Total stats should include BOTH files (skipped files are only skipped for analysis)
+        assert_eq!(staged.stats.files_changed, 2);
+        assert_eq!(staged.stats.insertions, 13); // 3 + 10 lines
+
+        // Diff text (sent to LLM) should only contain small file content
+        assert!(staged.diff_text.contains("line1"));
+        assert!(!staged.diff_text.contains("line9"));
+    }
+
+    #[test]
+    fn test_max_file_lines_zero_disables_check() {
+        let (_temp_dir, repo) = setup_test_repo();
+
+        // Create a large file
+        let large_content = (0..100).map(|i| format!("line{}", i)).collect::<Vec<_>>().join("\n");
+        create_and_stage_file(&repo, "large.txt", &large_content);
+
+        // Use max_file_lines of 0 (disabled)
+        let staged = get_staged_changes(&repo, 0, 100, 300, 0, &[]).unwrap();
+
+        // Large file should be in file_changes (not skipped)
+        assert_eq!(staged.stats.file_changes.len(), 1);
+        assert_eq!(staged.stats.skipped_files.len(), 0);
     }
 }

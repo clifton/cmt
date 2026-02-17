@@ -44,6 +44,10 @@ pub struct Args {
     #[arg(long, default_value_t = 500)]
     pub max_line_width: usize,
 
+    /// Maximum total line changes per file before prompting to ignore
+    #[arg(long, default_value_t = 5000)]
+    pub max_file_lines: usize,
+
     /// Use a specific template for the commit message
     #[arg(long)]
     pub template: Option<String>,
@@ -290,6 +294,20 @@ mod tests {
                 .map(ToString::to_string),
         );
         assert_eq!(args.context_lines, 10);
+    }
+
+    #[test]
+    fn test_max_file_lines_option() {
+        let args = Args::new_from(
+            ["cmt", "--max-file-lines", "10000"]
+                .iter()
+                .map(ToString::to_string),
+        );
+        assert_eq!(args.max_file_lines, 10000);
+
+        // Default should be 5000
+        let args = Args::new_from(["cmt"].iter().map(ToString::to_string));
+        assert_eq!(args.max_file_lines, 5000);
     }
 
     #[test]

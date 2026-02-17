@@ -4,8 +4,8 @@ use cmt::config_mod::{file as config_file, Config};
 use cmt::pricing::{self, PricingCache};
 use cmt::template_mod::TemplateManager;
 use cmt::{
-    analyze_diff, create_commit, generate_commit_message, get_current_branch, get_readme_excerpt,
-    Args, CommitError, CommitOptions, Spinner,
+    analyze_diff, append_to_cmtignore, create_commit, generate_commit_message, get_current_branch,
+    get_readme_excerpt, load_cmtignore, Args, CommitError, CommitOptions, Spinner,
 };
 use colored::*;
 use dotenv::dotenv;
@@ -204,12 +204,20 @@ async fn main() {
         }
     };
 
+    // Get repository root for .cmtignore
+    let repo_root = repo.workdir().unwrap_or_else(|| std::path::Path::new("."));
+
+    // Load .cmtignore patterns
+    let cmtignore_patterns = load_cmtignore(repo_root);
+
     // Get staged changes (includes both diff text and stats in one pass)
     let staged = match cmt::get_staged_changes(
         &repo,
         args.context_lines,
         args.max_lines_per_file,
         args.max_line_width,
+        args.max_file_lines,
+        &cmtignore_patterns,
     ) {
         Ok(changes) => changes,
         Err(e) => {
@@ -218,6 +226,78 @@ async fn main() {
             process::exit(1);
         }
     };
+
+    // Handle files that exceed the threshold (prompt to add to .cmtignore)
+    if !staged.stats.skipped_files.is_empty() && !args.yes && !args.message_only {
+        println!();
+        println!(
+            "{}",
+            format!(
+                "The following files exceed {} lines changed:",
+                args.max_file_lines
+            )
+            .yellow()
+            .bold()
+        );
+        for (file, adds, dels) in &staged.stats.skipped_files {
+            let total = adds + dels;
+            let lines_display = if total >= 1000 {
+                format!("{}K lines", total / 1000)
+            } else {
+                format!("{} lines", total)
+            };
+            println!("  - {} ({})", file, lines_display);
+        }
+        println!();
+
+        print!(
+            "{}",
+            "Would you like to add them to .cmtignore? [Y/n] ".cyan()
+        );
+        io::stdout().flush().unwrap();
+
+        let mut input = String::new();
+        let should_add = if io::stdin().read_line(&mut input).is_ok() {
+            let input = input.trim().to_lowercase();
+            input.is_empty() || input == "y" || input == "yes"
+        } else {
+            false
+        };
+
+        if should_add {
+            let files_to_add: Vec<String> = staged
+                .stats
+                .skipped_files
+                .iter()
+                .map(|(f, _, _)| f.clone())
+                .collect();
+
+            match append_to_cmtignore(repo_root, &files_to_add) {
+                Ok(()) => {
+                    println!(
+                        "{}",
+                        "Added to .cmtignore. These files will be skipped for analysis in future runs."
+                            .green()
+                    );
+                    println!(
+                        "{}",
+                        "(They will still be committed normally, just not sent to the LLM.)"
+                            .dimmed()
+                    );
+                    println!();
+                }
+                Err(e) => {
+                    eprintln!(
+                        "{}",
+                        format!("Warning: Failed to update .cmtignore: {}", e)
+                            .yellow()
+                            .bold()
+                    );
+                }
+            }
+        }
+    }
+
     let staged_changes = staged.diff_text.clone();
 
     // Determine diff size for adaptive behaviors (very high thresholds - Gemini supports 1M tokens)

@@ -166,8 +166,7 @@ mod tests {
         )
         .unwrap();
 
-        let content =
-            fs::read_to_string(temp_dir.path().join(CMTIGNORE_FILENAME)).unwrap();
+        let content = fs::read_to_string(temp_dir.path().join(CMTIGNORE_FILENAME)).unwrap();
         assert_eq!(content, "file1.sql\nfile2.sql\n");
     }
 
@@ -186,8 +185,14 @@ mod tests {
 
     #[test]
     fn test_matches_pattern_exact() {
-        assert!(matches_pattern("migrations/schema.sql", "migrations/schema.sql"));
-        assert!(!matches_pattern("migrations/schema.sql", "migrations/other.sql"));
+        assert!(matches_pattern(
+            "migrations/schema.sql",
+            "migrations/schema.sql"
+        ));
+        assert!(!matches_pattern(
+            "migrations/schema.sql",
+            "migrations/other.sql"
+        ));
     }
 
     #[test]

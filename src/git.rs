@@ -87,13 +87,23 @@ impl DiffStats {
         // Pad the string first, then colorize (ANSI codes break format width)
         print!(
             "{}",
-            format!("{:>width$}", format!("+{}", self.insertions), width = header_pad + adds_width + 1).green()
+            format!(
+                "{:>width$}",
+                format!("+{}", self.insertions),
+                width = header_pad + adds_width + 1
+            )
+            .green()
         );
         // 3 spaces between + and - columns (print separately to avoid ANSI interference)
         print!("   ");
         println!(
             "{}",
-            format!("{:>width$}", format!("-{}", self.deletions), width = dels_width + 1).red()
+            format!(
+                "{:>width$}",
+                format!("-{}", self.deletions),
+                width = dels_width + 1
+            )
+            .red()
         );
 
         // Print regular file list
@@ -865,7 +875,10 @@ mod tests {
         create_and_stage_file(&repo, "small.txt", "line1\nline2\nline3");
 
         // Create a large file (over threshold of 5 lines)
-        let large_content = (0..10).map(|i| format!("line{}", i)).collect::<Vec<_>>().join("\n");
+        let large_content = (0..10)
+            .map(|i| format!("line{}", i))
+            .collect::<Vec<_>>()
+            .join("\n");
         create_and_stage_file(&repo, "large.txt", &large_content);
 
         // Use max_file_lines of 5
@@ -893,7 +906,10 @@ mod tests {
         let (_temp_dir, repo) = setup_test_repo();
 
         // Create a large file
-        let large_content = (0..100).map(|i| format!("line{}", i)).collect::<Vec<_>>().join("\n");
+        let large_content = (0..100)
+            .map(|i| format!("line{}", i))
+            .collect::<Vec<_>>()
+            .join("\n");
         create_and_stage_file(&repo, "large.txt", &large_content);
 
         // Use max_file_lines of 0 (disabled)

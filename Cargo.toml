@@ -25,16 +25,16 @@ name = "cmt"
 path = "src/lib.rs"
 
 [dependencies]
-git2 = { version = "0.20.3", default-features = false }
-colored = "3.0.0"
+git2 = { version = "0.20.4", default-features = false }
+colored = "3.1.1"
 serde = { version = "1.0.228", features = ["derive"] }
-serde_json = "1.0.148"
+serde_json = "1.0.149"
 dotenv = "0.15.0"
-clap = { version = "4.5.53", features = ["derive", "std"] }
+clap = { version = "4.5.59", features = ["derive", "std"] }
 thiserror = "2.0.17"
 handlebars = "6.3.1"
-toml = "0.9.8"
-indicatif = "0.18.3"
+toml = "1.0.2+spec-1.1.0"
+indicatif = "0.18.4"
 arboard = "3.6.1"
 dirs = "6.0.0"
 
@@ -50,10 +50,10 @@ reqwest = { version = "0.13", features = [
 ], default-features = false }
 
 # Temp files for git commit -F
-tempfile = "3.24.0"
+tempfile = "3.25.0"
 
 [dev-dependencies]
-serial_test = "3.2.0"
+serial_test = "3.3.1"
 tokio = { version = "1", features = ["rt", "macros"] }
 
 [profile.release]

@@ -186,6 +186,27 @@ pub struct StagedChanges {
     pub stats: DiffStats,
 }
 
+/// Append a diff content line to `out`, truncating it to `max_width` bytes on a
+/// UTF-8 character boundary (never mid-codepoint, which would panic) and
+/// preserving any trailing newline so the next line isn't merged onto the
+/// truncated one.
+fn push_diff_line(out: &mut String, content: &str, max_width: usize) {
+    if content.len() <= max_width {
+        out.push_str(content);
+        return;
+    }
+    // Largest char boundary <= max_width so we never slice mid-codepoint.
+    let mut end = max_width;
+    while end > 0 && !content.is_char_boundary(end) {
+        end -= 1;
+    }
+    out.push_str(&content[..end]);
+    out.push_str("...");
+    if content.ends_with('\n') {
+        out.push('\n');
+    }
+}
+
 fn is_skippable(path: &Path) -> bool {
     let name = path
         .file_name()
@@ -424,16 +445,27 @@ pub fn get_staged_changes(
         .map(|(f, _, _)| f.clone())
         .collect();
 
-    // Build diff text
+    // Build diff text. The line cap is applied PER FILE: we track the current
+    // file and reset the counter whenever the diff moves on to a new file, so a
+    // large early file can't consume the whole budget and starve later files
+    // out of the diff entirely.
     let mut diff_str = String::new();
-    let mut line_count = 0;
+    let mut line_count = 0usize;
     let mut truncated = false;
+    let mut current_file: Option<std::path::PathBuf> = None;
 
     diff.print(git2::DiffFormat::Patch, |delta, _, line| {
         let file_path = delta
             .new_file()
             .path()
             .unwrap_or_else(|| std::path::Path::new(""));
+
+        // Reset the per-file line budget when we reach a new file.
+        if current_file.as_deref() != Some(file_path) {
+            current_file = Some(file_path.to_path_buf());
+            line_count = 0;
+            truncated = false;
+        }
 
         // Skip .lock files and other auto-skippable files
         if is_skippable(file_path) {
@@ -451,13 +483,8 @@ pub fn get_staged_changes(
                 '+' | '-' | ' ' => {
                     // Preserve the prefix character for additions, deletions, and context
                     diff_str.push(line.origin());
-                    let line_content = std::str::from_utf8(line.content()).unwrap_or("binary");
-                    if line_content.len() > max_line_width {
-                        diff_str.push_str(&line_content[..max_line_width]);
-                        diff_str.push_str("...");
-                    } else {
-                        diff_str.push_str(line_content);
-                    }
+                    let line_content = std::str::from_utf8(line.content()).unwrap_or("");
+                    push_diff_line(&mut diff_str, line_content, max_line_width);
                     line_count += 1; // Increment line count only for content lines
                 }
                 _ => {
@@ -467,7 +494,7 @@ pub fn get_staged_changes(
             }
         } else if !truncated {
             truncated = true;
-            diff_str.push_str("\n[Note: Diff output truncated to max lines per file.]");
+            diff_str.push_str("\n[Note: Diff output truncated to max lines per file.]\n");
         }
         true
     })
@@ -686,6 +713,48 @@ mod tests {
         // Assert that the line is truncated to max_line_width
         assert!(staged.diff_text.contains(&long_line[..max_line_width]));
         assert!(staged.diff_text.contains("..."));
+    }
+
+    #[test]
+    fn test_max_line_width_utf8_does_not_panic() {
+        let (_temp_dir, repo) = setup_test_repo();
+
+        // A long line of 2-byte chars; an odd byte-width cut lands mid-codepoint,
+        // which a raw byte slice would panic on.
+        let long_line = "é".repeat(400);
+        create_and_stage_file(&repo, "test.txt", &long_line);
+
+        let max_line_width = 101;
+        let staged = get_staged_changes(&repo, 0, 100, max_line_width, 0, &[]).unwrap();
+
+        // Must truncate without panicking.
+        assert!(staged.diff_text.contains("..."));
+    }
+
+    #[test]
+    fn test_max_lines_per_file_is_per_file_not_global() {
+        let (_temp_dir, repo) = setup_test_repo();
+
+        // First file alone exceeds the cap; a second file follows it.
+        let mut big = String::new();
+        for i in 0..50 {
+            big.push_str(&format!("alpha {}\n", i));
+        }
+        create_and_stage_file(&repo, "a_first.txt", &big);
+        create_and_stage_file(&repo, "z_second.txt", "unique-second-file-marker\n");
+
+        let staged = get_staged_changes(&repo, 0, 10, 300, 0, &[]).unwrap();
+
+        // The first file is truncated...
+        assert!(staged
+            .diff_text
+            .contains("[Note: Diff output truncated to max lines per file.]"));
+        // ...but the cap is per-file, so the second file is NOT starved out.
+        assert!(
+            staged.diff_text.contains("unique-second-file-marker"),
+            "second file content should survive a per-file cap; diff was:\n{}",
+            staged.diff_text
+        );
     }
 
     #[test]

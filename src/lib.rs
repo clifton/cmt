@@ -55,31 +55,35 @@ fn validate_commit_data(mut data: CommitTemplate) -> CommitTemplate {
     // Validate scope (lowercase, no spaces)
     if let Some(ref mut scope) = data.scope {
         *scope = scope.to_lowercase().replace(' ', "-");
-        // Remove scope if it's too generic, empty, or literally "null"
+        // Remove scope if it's too generic, empty, or a placeholder value the
+        // model sometimes emits ("null"/"none") that would render as `(none)`.
         if scope.is_empty()
             || scope == "general"
             || scope == "misc"
             || scope == "other"
             || scope == "null"
+            || scope == "none"
         {
             data.scope = None;
         }
     }
 
-    // Clean up details - remove bullets that duplicate subject
+    // Clean up details - drop only bullets that are an exact echo of the
+    // subject. The previous substring logic treated an empty line as "contained
+    // in the subject" (and any bullet that happened to be a substring), so it
+    // could delete blank separators and legitimate bullets, corrupting the body.
     if let Some(ref mut details) = data.details {
-        let subject_lower = data.subject.to_lowercase();
+        let subject_norm = data.subject.trim().to_lowercase();
         let lines: Vec<&str> = details
             .lines()
             .filter(|line| {
-                let line_lower = line.to_lowercase();
-                // Keep line if it's not too similar to subject
-                !line_lower.contains(&subject_lower)
-                    && !subject_lower.contains(line_lower.trim_start_matches("- "))
+                let bullet = line.trim().trim_start_matches("- ").trim().to_lowercase();
+                // Keep blank lines and anything that isn't an exact subject echo.
+                bullet.is_empty() || bullet != subject_norm
             })
             .collect();
 
-        if lines.is_empty() {
+        if lines.iter().all(|l| l.trim().is_empty()) {
             data.details = None;
         } else {
             *details = lines.join("\n");
@@ -337,5 +341,28 @@ mod tests {
         assert!(validated.scope.is_none());
         // Details that duplicate subject should be removed
         assert!(validated.details.is_some());
+    }
+
+    #[test]
+    fn test_validate_drops_none_scope_and_preserves_body() {
+        let data = CommitTemplate {
+            commit_type: templates::CommitType::Feat,
+            subject: "add caching layer".to_string(),
+            details: Some("- add caching layer\n\n- expire entries after 24h".to_string()),
+            issues: None,
+            breaking: None,
+            scope: Some("none".to_string()),
+        };
+
+        let validated = validate_commit_data(data);
+
+        // "none" is a placeholder scope and must be dropped (no `(none)` output).
+        assert!(validated.scope.is_none());
+
+        // The exact subject echo is dropped, but the legitimate bullet survives
+        // (the old substring dedup could have wiped the whole body).
+        let details = validated.details.expect("body should not be emptied");
+        assert!(details.contains("- expire entries after 24h"));
+        assert!(!details.contains("- add caching layer"));
     }
 }

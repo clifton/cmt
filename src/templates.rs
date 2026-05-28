@@ -251,7 +251,7 @@ impl TemplateManager {
         }
 
         let rendered = self.handlebars.render(template_name, &json!(data))?;
-        Ok(rendered)
+        Ok(normalize_message(&rendered))
     }
 
     /// Get a list of available templates
@@ -304,6 +304,27 @@ impl TemplateManager {
     }
 }
 
+/// Normalize a rendered commit message: collapse any run of 3+ newlines into a
+/// single blank-line separator and trim trailing whitespace. Optional template
+/// sections (`{{#if issues}}`, `{{#if breaking}}`) leave blank lines when empty;
+/// this keeps the output tidy regardless of which fields are present.
+fn normalize_message(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut newlines = 0usize;
+    for ch in s.chars() {
+        if ch == '\n' {
+            newlines += 1;
+            if newlines <= 2 {
+                out.push('\n');
+            }
+        } else {
+            newlines = 0;
+            out.push(ch);
+        }
+    }
+    out.trim_end().to_string()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -350,8 +371,9 @@ mod tests {
             ..Default::default()
         };
 
+        // Trailing whitespace from the empty {{#if details}} block is trimmed.
         let rendered = manager.render("test", &data_with_scope).unwrap();
-        assert_eq!(rendered, "feat: add new feature (ui)\n\n");
+        assert_eq!(rendered, "feat: add new feature (ui)");
 
         // Without scope
         let data_without_scope = CommitTemplate {
@@ -361,7 +383,50 @@ mod tests {
         };
 
         let rendered = manager.render("test", &data_without_scope).unwrap();
-        assert_eq!(rendered, "feat: add new feature\n\n");
+        assert_eq!(rendered, "feat: add new feature");
+    }
+
+    #[test]
+    fn test_conventional_template_renders_issues_and_breaking() {
+        let mut manager = TemplateManager {
+            handlebars: Handlebars::new(),
+            templates: HashMap::new(),
+        };
+        manager
+            .register_template(
+                "conventional",
+                &crate::config::defaults::conventional_template(),
+            )
+            .unwrap();
+
+        let data = CommitTemplate {
+            commit_type: CommitType::Feat,
+            subject: "drop legacy auth".to_string(),
+            details: Some("- remove the /v1/login endpoint".to_string()),
+            issues: Some("#42".to_string()),
+            breaking: Some("removes the /v1/login endpoint".to_string()),
+            scope: None,
+        };
+
+        let rendered = manager.render("conventional", &data).unwrap();
+
+        // The default template must NOT drop the issues/breaking fields, and a
+        // breaking change must carry the `!` marker per the Conventional spec.
+        assert!(
+            rendered.starts_with("feat!:"),
+            "breaking `!` marker missing: {rendered:?}"
+        );
+        assert!(rendered.contains("- remove the /v1/login endpoint"));
+        assert!(
+            rendered.contains("Fixes: #42"),
+            "issues footer missing: {rendered:?}"
+        );
+        assert!(
+            rendered.contains("BREAKING CHANGE: removes the /v1/login endpoint"),
+            "breaking footer missing: {rendered:?}"
+        );
+        // No trailing blank lines.
+        assert!(!rendered.ends_with('\n'), "should be trimmed: {rendered:?}");
     }
 
     #[test]

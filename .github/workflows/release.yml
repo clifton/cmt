@@ -136,33 +136,47 @@ jobs:
         run: |
           VERSION=${{ steps.get_version.outputs.VERSION }}
 
-          # Wait for all assets to be available
+          # The Homebrew formula references all four non-Windows binaries, so we
+          # must wait for the complete set before computing SHAs. Waiting for
+          # only 4 (or letting a download silently fail) could emit a formula
+          # with an empty sha256, which is broken and hard to recover from.
+          EXPECTED_ASSETS=5
           echo "Waiting for release assets..."
           for i in {1..30}; do
             ASSET_COUNT=$(gh release view "v$VERSION" --json assets --jq '.assets | length')
-            if [ "$ASSET_COUNT" -ge 4 ]; then
+            if [ "$ASSET_COUNT" -ge "$EXPECTED_ASSETS" ]; then
               echo "Found $ASSET_COUNT assets"
               break
             fi
-            echo "Found $ASSET_COUNT assets, waiting... ($i/30)"
+            echo "Found $ASSET_COUNT assets, waiting for $EXPECTED_ASSETS... ($i/30)"
             sleep 10
           done
 
-          # Download and compute SHA256 for each binary
-          gh release download "v$VERSION" -p "cmt-darwin-arm64" -D /tmp
-          gh release download "v$VERSION" -p "cmt-darwin-amd64" -D /tmp
-          gh release download "v$VERSION" -p "cmt-linux-arm64" -D /tmp || true
-          gh release download "v$VERSION" -p "cmt-linux-amd64" -D /tmp || true
+          # Download every binary the formula needs. No `|| true`: a missing
+          # asset must fail the job rather than silently produce an empty SHA.
+          for asset in cmt-darwin-arm64 cmt-darwin-amd64 cmt-linux-arm64 cmt-linux-amd64; do
+            gh release download "v$VERSION" -p "$asset" -D /tmp
+          done
 
-          echo "SHA_DARWIN_ARM64=$(sha256sum /tmp/cmt-darwin-arm64 | cut -d' ' -f1)" >> $GITHUB_OUTPUT
-          echo "SHA_DARWIN_AMD64=$(sha256sum /tmp/cmt-darwin-amd64 | cut -d' ' -f1)" >> $GITHUB_OUTPUT
+          SHA_DARWIN_ARM64=$(sha256sum /tmp/cmt-darwin-arm64 | cut -d' ' -f1)
+          SHA_DARWIN_AMD64=$(sha256sum /tmp/cmt-darwin-amd64 | cut -d' ' -f1)
+          SHA_LINUX_ARM64=$(sha256sum /tmp/cmt-linux-arm64 | cut -d' ' -f1)
+          SHA_LINUX_AMD64=$(sha256sum /tmp/cmt-linux-amd64 | cut -d' ' -f1)
 
-          if [ -f /tmp/cmt-linux-arm64 ]; then
-            echo "SHA_LINUX_ARM64=$(sha256sum /tmp/cmt-linux-arm64 | cut -d' ' -f1)" >> $GITHUB_OUTPUT
-          fi
-          if [ -f /tmp/cmt-linux-amd64 ]; then
-            echo "SHA_LINUX_AMD64=$(sha256sum /tmp/cmt-linux-amd64 | cut -d' ' -f1)" >> $GITHUB_OUTPUT
-          fi
+          # Refuse to proceed with a missing/empty SHA.
+          for sha in "$SHA_DARWIN_ARM64" "$SHA_DARWIN_AMD64" "$SHA_LINUX_ARM64" "$SHA_LINUX_AMD64"; do
+            if [ -z "$sha" ]; then
+              echo "Error: computed an empty SHA256 - refusing to write a broken formula"
+              exit 1
+            fi
+          done
+
+          {
+            echo "SHA_DARWIN_ARM64=$SHA_DARWIN_ARM64"
+            echo "SHA_DARWIN_AMD64=$SHA_DARWIN_AMD64"
+            echo "SHA_LINUX_ARM64=$SHA_LINUX_ARM64"
+            echo "SHA_LINUX_AMD64=$SHA_LINUX_AMD64"
+          } >> $GITHUB_OUTPUT
 
       - name: Update Homebrew formula
         env:

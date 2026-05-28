@@ -65,9 +65,21 @@ echo "Installing cmt ${LATEST_VERSION} for ${PLATFORM} ${ARCH}"
 TMP_DIR=$(mktemp -d)
 trap 'rm -rf "$TMP_DIR"' EXIT
 
-# Download binary
+# Download binary.
+# -f makes curl exit non-zero on HTTP errors (e.g. 404) instead of writing an
+# HTML error page to the output file and "installing" it as the binary.
 DOWNLOAD_URL="https://github.com/clifton/cmt/releases/download/${LATEST_VERSION}/${BINARY}"
-eval curl -sL $CURL_HEADERS "$DOWNLOAD_URL" -o "$TMP_DIR/$BINARY"
+if ! eval curl -fSL $CURL_HEADERS "$DOWNLOAD_URL" -o "$TMP_DIR/$BINARY"; then
+    echo "Error: failed to download $BINARY from $DOWNLOAD_URL"
+    echo "       (no prebuilt binary for ${PLATFORM} ${ARCH} in ${LATEST_VERSION}?)"
+    exit 1
+fi
+
+# Sanity-check the download before trusting it.
+if [ ! -s "$TMP_DIR/$BINARY" ]; then
+    echo "Error: downloaded file is empty"
+    exit 1
+fi
 
 # Make binary executable
 chmod +x "$TMP_DIR/$BINARY"

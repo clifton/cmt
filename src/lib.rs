@@ -13,9 +13,11 @@ mod git;
 pub mod pricing;
 mod progress;
 mod prompts;
+mod redact;
 mod templates;
 
 pub use cmtignore::{append_to_cmtignore, load_cmtignore};
+pub use redact::redact_secrets;
 
 pub use commit::{create_commit, CommitError, CommitOptions, CommitResult};
 

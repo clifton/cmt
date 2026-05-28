@@ -16,6 +16,7 @@ pub const CMTIGNORE_FILENAME: &str = ".cmtignore";
 pub const DEFAULT_PROVIDER: &str = "gemini";
 pub const DEFAULT_THINKING: &str = "low"; // Reasoning depth: none, minimal, low, high
 pub const TIMEOUT_SECS: u64 = 60; // Per-request timeout (seconds) for the LLM call
+pub const REDACT: bool = true; // Scrub likely secrets from the diff before sending it
 
 // Git defaults
 pub const INCLUDE_RECENT_COMMITS: bool = true;
@@ -51,6 +52,7 @@ pub fn example_config() -> String {
 message_only = {}
 no_diff_stats = {}
 show_raw_diff = {}
+redact = {}  # Scrub likely secrets (keys, tokens, private keys) from the diff
 context_lines = {}
 max_lines_per_file = {}
 max_line_width = {}
@@ -76,6 +78,7 @@ recent_commits_count = {}
         MESSAGE_ONLY,
         NO_DIFF_STATS,
         SHOW_RAW_DIFF,
+        REDACT,
         CONTEXT_LINES,
         MAX_LINES_PER_FILE,
         MAX_LINE_WIDTH,

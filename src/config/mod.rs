@@ -48,6 +48,7 @@ pub struct Config {
     pub message_only: bool,
     pub no_diff_stats: bool,
     pub show_raw_diff: bool,
+    pub redact: bool,
     pub context_lines: u32,
     pub max_lines_per_file: usize,
     pub max_line_width: usize,
@@ -77,6 +78,7 @@ impl Default for Config {
             message_only: defaults::MESSAGE_ONLY,
             no_diff_stats: defaults::NO_DIFF_STATS,
             show_raw_diff: defaults::SHOW_RAW_DIFF,
+            redact: defaults::REDACT,
             context_lines: defaults::CONTEXT_LINES,
             max_lines_per_file: defaults::MAX_LINES_PER_FILE,
             max_line_width: defaults::MAX_LINE_WIDTH,
@@ -155,6 +157,9 @@ impl Config {
         if other.show_raw_diff != defaults::SHOW_RAW_DIFF {
             self.show_raw_diff = other.show_raw_diff;
         }
+        if other.redact != defaults::REDACT {
+            self.redact = other.redact;
+        }
         if other.context_lines != defaults::CONTEXT_LINES {
             self.context_lines = other.context_lines;
         }
@@ -202,6 +207,7 @@ impl Config {
             message_only: args.message_only,
             no_diff_stats: args.no_diff_stats,
             show_raw_diff: args.show_raw_diff,
+            redact: !args.no_redact,
             context_lines: args.context_lines,
             max_lines_per_file: args.max_lines_per_file,
             max_line_width: args.max_line_width,

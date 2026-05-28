@@ -5,11 +5,10 @@ Generate a professional commit message for this diff:
 ```
 
 Instructions:
-1. If pre-analysis was provided above, use it to help select the commit type
-2. ALWAYS verify by reading the actual diff - the analysis is a hint, not a rule
-3. Focus on the PRIMARY purpose of the change (what problem does it solve?)
-4. For the subject line: be specific, use present tense, max 50 chars
-5. For details: explain WHY, not just WHAT changed
+1. Read the actual diff carefully to determine the change's intent
+2. Focus on the PRIMARY purpose of the change (what problem does it solve?)
+3. For the subject line: be specific, use present tense, max 50 chars
+4. For details: explain WHY, not just WHAT changed
 
 Remember the type priority hierarchy:
 fix > feat > perf > refactor > test > build > ci > chore > style > docs

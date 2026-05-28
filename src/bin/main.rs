@@ -4,7 +4,7 @@ use cmt::config_mod::{file as config_file, Config};
 use cmt::pricing::{self, PricingCache};
 use cmt::template_mod::TemplateManager;
 use cmt::{
-    analyze_diff, append_to_cmtignore, create_commit, generate_commit_message, get_current_branch,
+    append_to_cmtignore, create_commit, generate_commit_message, get_current_branch,
     get_readme_excerpt, load_cmtignore, Args, CommitError, CommitOptions, Spinner,
 };
 use colored::*;
@@ -210,13 +210,15 @@ async fn main() {
     // Load .cmtignore patterns
     let cmtignore_patterns = load_cmtignore(repo_root);
 
-    // Get staged changes (includes both diff text and stats in one pass)
+    // Get staged changes (includes both diff text and stats in one pass).
+    // Read from the resolved `config` (defaults < global < project < CLI), not
+    // raw `args`, so .cmt.toml settings actually take effect.
     let staged = match cmt::get_staged_changes(
         &repo,
-        args.context_lines,
-        args.max_lines_per_file,
-        args.max_line_width,
-        args.max_file_lines,
+        config.context_lines,
+        config.max_lines_per_file,
+        config.max_line_width,
+        config.max_file_lines,
         &cmtignore_patterns,
     ) {
         Ok(changes) => changes,
@@ -228,13 +230,13 @@ async fn main() {
     };
 
     // Handle files that exceed the threshold (prompt to add to .cmtignore)
-    if !staged.stats.skipped_files.is_empty() && !args.yes && !args.message_only {
+    if !staged.stats.skipped_files.is_empty() && !args.yes && !config.message_only {
         println!();
         println!(
             "{}",
             format!(
                 "The following files exceed {} lines changed:",
-                args.max_file_lines
+                config.max_file_lines
             )
             .yellow()
             .bold()
@@ -305,14 +307,14 @@ async fn main() {
         || (staged.stats.insertions + staged.stats.deletions) > 50000;
 
     // Get recent commits - only skip for extremely large diffs
-    let include_recent = !args.no_recent_commits && !is_very_large_diff;
+    let include_recent = config.include_recent_commits && !is_very_large_diff;
     let effective_recent_count = if include_recent {
-        args.recent_commits_count // Always use full count - we have the token budget
+        config.recent_commits_count // Always use full count - we have the token budget
     } else {
         0
     };
 
-    if !args.no_recent_commits && !include_recent {
+    if config.include_recent_commits && !include_recent {
         eprintln!(
             "{}",
             "Skipping recent commits for this extremely large diff.".yellow()
@@ -335,16 +337,6 @@ async fn main() {
         String::new()
     };
 
-    // Analyze the diff for better commit type classification
-    let analysis = match analyze_diff(&repo) {
-        Ok(a) => Some(a),
-        Err(e) => {
-            eprintln!("{}", "Warning: Failed to analyze diff:".yellow().bold());
-            eprintln!("{}", e);
-            None
-        }
-    };
-
     // Get current branch name for context
     let branch_name = get_current_branch(&repo);
 
@@ -352,29 +344,25 @@ async fn main() {
     let readme_excerpt = get_readme_excerpt(&repo, 50);
 
     // Show raw diff if requested
-    if args.show_raw_diff {
+    if config.show_raw_diff {
         println!("{}", "Raw diff:".cyan().bold());
         println!("{}", staged_changes);
-        if let Some(ref a) = analysis {
-            println!("\n{}", "Diff analysis:".cyan().bold());
-            println!("{}", a.summary());
-        }
         println!();
     }
 
     // Get model info for display
-    let model_name = args
+    let model_name = config
         .model
         .clone()
-        .unwrap_or_else(|| default_model(&args.provider).to_string());
+        .unwrap_or_else(|| default_model(&config.provider).to_string());
 
     // Show diff stats before sending to LLM (unless message-only mode)
-    if !args.message_only && !args.no_diff_stats {
+    if !config.message_only && !config.no_diff_stats {
         staged.stats.print();
     }
 
     // Generate commit message with spinner (only in interactive mode)
-    let spinner = if !args.message_only {
+    let spinner = if !config.message_only {
         Some(Spinner::new(&format!(
             "Generating commit message with {}...",
             model_name
@@ -385,10 +373,9 @@ async fn main() {
 
     let start_time = Instant::now();
     let result = match generate_commit_message(
-        &args,
+        &config,
         &staged_changes,
         &recent_commits,
-        analysis.as_ref(),
         branch_name.as_deref(),
         readme_excerpt.as_deref(),
         &template_manager,
@@ -424,7 +411,7 @@ async fn main() {
                             .yellow()
                             .bold()
                     );
-                } else if !args.message_only {
+                } else if !config.message_only {
                     println!("{}", "✓ Copied to clipboard".green());
                 }
             }
@@ -440,7 +427,7 @@ async fn main() {
     }
 
     // Output the commit message
-    if args.message_only {
+    if config.message_only {
         // Output just the message for piping to git commit
         print!("{}", commit_message);
     } else {
@@ -462,7 +449,7 @@ async fn main() {
         let elapsed_secs = elapsed.as_secs_f32();
 
         let cost_str = pricing_cache
-            .get_model_pricing(&args.provider, &model_name)
+            .get_model_pricing(&config.provider, &model_name)
             .and_then(|p| pricing::calculate_cost(&p, input_tokens, output_tokens))
             .map(|c| format!(", {}", pricing::format_cost(c)))
             .unwrap_or_default();
@@ -485,10 +472,12 @@ async fn main() {
         // Handle commit prompt (default behavior unless --no-commit)
         if !args.no_commit {
             let mut current_message = commit_message.clone();
-            let mut current_args = args.clone();
+            // Clone the resolved config so hint regeneration can layer in a hint
+            // without mutating the original.
+            let mut current_config = config.clone();
 
             loop {
-                let action = if current_args.yes {
+                let action = if args.yes {
                     CommitAction::Commit
                 } else {
                     // Prompt for action
@@ -516,7 +505,7 @@ async fn main() {
                     CommitAction::Commit => {
                         // Create the commit using git commit (respects hooks)
                         let options = CommitOptions {
-                            no_verify: current_args.no_verify,
+                            no_verify: args.no_verify,
                         };
                         match create_commit(&repo, &current_message, &options) {
                             Ok(result) => {
@@ -566,16 +555,15 @@ async fn main() {
                         if io::stdin().read_line(&mut hint_input).is_ok() {
                             let hint = hint_input.trim();
                             if !hint.is_empty() {
-                                current_args.hint = Some(hint.to_string());
+                                current_config.hint = Some(hint.to_string());
 
                                 // Regenerate with spinner
                                 let spinner =
                                     Spinner::new(&format!("Regenerating with {}...", model_name));
                                 match generate_commit_message(
-                                    &current_args,
+                                    &current_config,
                                     &staged_changes,
                                     &recent_commits,
-                                    analysis.as_ref(),
                                     branch_name.as_deref(),
                                     readme_excerpt.as_deref(),
                                     &template_manager,

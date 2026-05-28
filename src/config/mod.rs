@@ -36,8 +36,13 @@ impl From<std::io::Error> for ConfigError {
     }
 }
 
-/// Main configuration struct that combines CLI and file configs
+/// Main configuration struct that combines CLI and file configs.
+///
+/// `#[serde(default)]` lets a config file set only the keys it cares about;
+/// any omitted field falls back to [`Config::default`] instead of failing to
+/// deserialize (which `load()` would otherwise silently swallow).
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(default)]
 pub struct Config {
     // General options
     pub message_only: bool,
@@ -52,6 +57,7 @@ pub struct Config {
     pub provider: String,
     pub model: Option<String>,
     pub temperature: Option<f32>,
+    pub thinking: String,
 
     // Git options
     pub include_recent_commits: bool,
@@ -77,6 +83,7 @@ impl Default for Config {
             provider: defaults::DEFAULT_PROVIDER.to_string(),
             model: None,
             temperature: None,
+            thinking: defaults::DEFAULT_THINKING.to_string(),
             include_recent_commits: defaults::INCLUDE_RECENT_COMMITS,
             recent_commits_count: defaults::RECENT_COMMITS_COUNT,
             template: None,
@@ -167,6 +174,9 @@ impl Config {
         if other.temperature.is_some() {
             self.temperature = other.temperature;
         }
+        if other.thinking != defaults::DEFAULT_THINKING {
+            self.thinking = other.thinking.clone();
+        }
         if other.include_recent_commits != defaults::INCLUDE_RECENT_COMMITS {
             self.include_recent_commits = other.include_recent_commits;
         }
@@ -194,9 +204,10 @@ impl Config {
             provider: args.provider.clone(),
             model: args.model.clone(),
             temperature: args.temperature,
-            include_recent_commits: defaults::INCLUDE_RECENT_COMMITS,
-            recent_commits_count: defaults::RECENT_COMMITS_COUNT,
-            template: None,
+            thinking: args.thinking.clone(),
+            include_recent_commits: !args.no_recent_commits,
+            recent_commits_count: args.recent_commits_count,
+            template: args.template.clone(),
             hint: args.hint.clone(),
         }
     }
@@ -258,5 +269,81 @@ impl Config {
         }
 
         None
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::config::cli::Args;
+
+    fn args_from(argv: &[&str]) -> cli::Args {
+        Args::new_from(argv.iter().map(ToString::to_string))
+    }
+
+    #[test]
+    fn test_from_args_carries_all_cli_fields() {
+        // These fields were previously hardcoded to defaults in from_args,
+        // silently discarding the CLI/file values.
+        let args = args_from(&[
+            "cmt",
+            "--template",
+            "simple",
+            "--recent-commits-count",
+            "3",
+            "--thinking",
+            "high",
+            "--no-recent-commits",
+        ]);
+        let cfg = Config::from_args(&args);
+        assert_eq!(cfg.template.as_deref(), Some("simple"));
+        assert_eq!(cfg.recent_commits_count, 3);
+        assert_eq!(cfg.thinking, "high");
+        assert!(!cfg.include_recent_commits);
+    }
+
+    #[test]
+    fn test_file_config_applies_when_cli_uses_defaults() {
+        // The dead-config bug: a .cmt.toml provider/template must survive when
+        // the CLI passes no explicit overrides.
+        let mut merged = Config::default();
+        let file = Config {
+            provider: "claude".to_string(),
+            template: Some("detailed".to_string()),
+            recent_commits_count: 25,
+            ..Config::default()
+        };
+        merged.merge(&file);
+        merged.merge(&Config::from_args(&args_from(&["cmt"])));
+
+        assert_eq!(merged.provider, "claude");
+        assert_eq!(merged.template.as_deref(), Some("detailed"));
+        assert_eq!(merged.recent_commits_count, 25);
+    }
+
+    #[test]
+    fn test_partial_config_file_deserializes() {
+        // A .cmt.toml that sets only one key must parse (filling the rest from
+        // defaults), not fail and get silently swallowed by load().
+        let cfg: Config =
+            toml::from_str("template = \"simple\"\n").expect("partial config must deserialize");
+        assert_eq!(cfg.template.as_deref(), Some("simple"));
+        assert_eq!(cfg.provider, defaults::DEFAULT_PROVIDER);
+        assert_eq!(cfg.thinking, defaults::DEFAULT_THINKING);
+    }
+
+    #[test]
+    fn test_cli_overrides_file() {
+        let mut merged = Config::default();
+        merged.merge(&Config {
+            provider: "claude".to_string(),
+            ..Config::default()
+        });
+        merged.merge(&Config::from_args(&args_from(&[
+            "cmt",
+            "--provider",
+            "openai",
+        ])));
+        assert_eq!(merged.provider, "openai");
     }
 }

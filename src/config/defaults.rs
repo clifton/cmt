@@ -14,6 +14,7 @@ pub const CMTIGNORE_FILENAME: &str = ".cmtignore";
 
 // AI provider defaults
 pub const DEFAULT_PROVIDER: &str = "gemini";
+pub const DEFAULT_THINKING: &str = "low"; // Reasoning depth: none, minimal, low, high
 
 // Git defaults
 pub const INCLUDE_RECENT_COMMITS: bool = true;
@@ -58,6 +59,7 @@ max_file_lines = {}
 provider = "{}"  # Options: {}
 # model = "{}"  # Uncomment to set a specific model
 # temperature = 0.3  # Uncomment to set a specific temperature
+thinking = "{}"  # Reasoning depth: none, minimal, low, high
 
 # Git options
 include_recent_commits = {}
@@ -79,6 +81,7 @@ recent_commits_count = {}
         DEFAULT_PROVIDER,
         AVAILABLE_PROVIDERS.join(", "),
         DEFAULT_CLAUDE_MODEL,
+        DEFAULT_THINKING,
         INCLUDE_RECENT_COMMITS,
         RECENT_COMMITS_COUNT,
         DEFAULT_TEMPLATE,

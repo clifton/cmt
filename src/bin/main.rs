@@ -10,7 +10,7 @@ use cmt::{
 use colored::*;
 use dotenv::dotenv;
 use git2::Repository;
-use std::io::{self, Write};
+use std::io::{self, IsTerminal, Write};
 use std::time::Instant;
 use std::{env, process};
 
@@ -194,6 +194,11 @@ async fn main() {
     let cli_config = Config::from_args(&args);
     config.merge(&cli_config);
 
+    // Only prompt / animate when both stdin and stdout are real terminals. When
+    // piped or run in CI, cmt must not block on a closed stdin or read EOF and
+    // silently cancel; it relies on flags (-y / --no-commit / -m) instead.
+    let interactive = io::stdin().is_terminal() && io::stdout().is_terminal();
+
     // Open git repository (discover searches up the directory tree)
     let repo = match Repository::discover(".") {
         Ok(repo) => repo,
@@ -229,8 +234,9 @@ async fn main() {
         }
     };
 
-    // Handle files that exceed the threshold (prompt to add to .cmtignore)
-    if !staged.stats.skipped_files.is_empty() && !args.yes && !config.message_only {
+    // Handle files that exceed the threshold (prompt to add to .cmtignore).
+    // Only when interactive — never block a piped/CI run on this prompt.
+    if !staged.stats.skipped_files.is_empty() && interactive && !args.yes && !config.message_only {
         println!();
         println!(
             "{}",
@@ -256,7 +262,7 @@ async fn main() {
             "{}",
             "Would you like to add them to .cmtignore? [Y/n] ".cyan()
         );
-        io::stdout().flush().unwrap();
+        let _ = io::stdout().flush();
 
         let mut input = String::new();
         let should_add = if io::stdin().read_line(&mut input).is_ok() {
@@ -361,8 +367,9 @@ async fn main() {
         staged.stats.print();
     }
 
-    // Generate commit message with spinner (only in interactive mode)
-    let spinner = if !config.message_only {
+    // Generate commit message with spinner (only when attached to a terminal;
+    // don't animate into a pipe/log).
+    let spinner = if !config.message_only && io::stdout().is_terminal() {
         Some(Spinner::new(&format!(
             "Generating commit message with {}...",
             model_name
@@ -470,7 +477,14 @@ async fn main() {
         );
 
         // Handle commit prompt (default behavior unless --no-commit)
-        if !args.no_commit {
+        if !args.no_commit && !args.yes && !interactive {
+            // No TTY to confirm on, and -y was not passed: don't silently cancel.
+            eprintln!(
+                "{}",
+                "Not committing: stdin is not a terminal. Re-run with -y to commit, or --no-commit to just print the message."
+                    .yellow()
+            );
+        } else if !args.no_commit {
             let mut current_message = commit_message.clone();
             // Clone the resolved config so hint regeneration can layer in a hint
             // without mutating the original.
@@ -485,7 +499,7 @@ async fn main() {
                         "{}",
                         "[y]es to commit, [n]o to cancel, [h]int to regenerate: ".cyan()
                     );
-                    io::stdout().flush().unwrap();
+                    let _ = io::stdout().flush();
 
                     let mut input = String::new();
                     if io::stdin().read_line(&mut input).is_ok() {
@@ -549,7 +563,7 @@ async fn main() {
                     CommitAction::Hint => {
                         // Prompt for hint
                         print!("{}", "Enter hint: ".cyan());
-                        io::stdout().flush().unwrap();
+                        let _ = io::stdout().flush();
 
                         let mut hint_input = String::new();
                         if io::stdin().read_line(&mut hint_input).is_ok() {

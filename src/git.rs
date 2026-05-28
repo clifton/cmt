@@ -410,7 +410,7 @@ pub fn get_staged_changes(
         file_changes,
         skipped_files,
         ignored_files,
-        has_unstaged: has_unstaged_changes(repo).unwrap_or(false),
+        has_unstaged: has_unstaged_changes(repo),
     };
 
     // Adaptive trimming: only tighten for very large diffs (Gemini Flash supports 1M tokens)
@@ -510,9 +510,22 @@ pub fn get_staged_changes(
     }
 }
 
-fn has_unstaged_changes(repo: &Repository) -> Result<bool, GitError> {
-    let diff = repo.diff_index_to_workdir(None, None)?;
-    Ok(diff.stats()?.files_changed() > 0)
+/// Whether the working tree has tracked changes that are not staged.
+pub fn has_unstaged_changes(repo: &Repository) -> bool {
+    repo.diff_index_to_workdir(None, None)
+        .and_then(|d| Ok(d.stats()?.files_changed() > 0))
+        .unwrap_or(false)
+}
+
+/// Stage all tracked modifications and deletions (equivalent to `git add -u`).
+///
+/// Untracked files are intentionally NOT added — that requires explicit intent.
+pub fn stage_tracked_changes(repo: &Repository) -> Result<(), GitError> {
+    let mut index = repo.index()?;
+    // update_all stages modifications/deletions of already-tracked paths.
+    index.update_all(["*"].iter(), None)?;
+    index.write()?;
+    Ok(())
 }
 
 #[cfg(test)]
@@ -603,7 +616,7 @@ mod tests {
         let (_temp_dir, repo) = setup_test_repo();
 
         // Initially should have no unstaged changes
-        assert!(!has_unstaged_changes(&repo).unwrap());
+        assert!(!has_unstaged_changes(&repo));
 
         // Create and stage a file first
         create_and_stage_file(&repo, "test.txt", "Initial content");
@@ -615,7 +628,7 @@ mod tests {
         writeln!(file, "Modified content").unwrap();
 
         // Should now detect unstaged changes
-        assert!(has_unstaged_changes(&repo).unwrap());
+        assert!(has_unstaged_changes(&repo));
     }
 
     #[test]

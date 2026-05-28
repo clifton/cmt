@@ -96,6 +96,10 @@ pub struct Args {
     #[arg(short, long)]
     pub copy: bool,
 
+    /// Stage all tracked changes (like `git commit -a`) before generating
+    #[arg(short = 'a', long)]
+    pub all: bool,
+
     /// Skip commit prompt (just show the message)
     #[arg(long)]
     pub no_commit: bool,

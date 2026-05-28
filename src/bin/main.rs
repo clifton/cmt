@@ -95,35 +95,6 @@ fn clean_edited_message(edited: &str) -> Option<String> {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_clean_edited_message_strips_comments_and_trims() {
-        let edited = "# Please edit your message\nfix: handle empty input\n\n# trailing comment\n";
-        assert_eq!(
-            clean_edited_message(edited).as_deref(),
-            Some("fix: handle empty input")
-        );
-    }
-
-    #[test]
-    fn test_clean_edited_message_empty_returns_none() {
-        assert_eq!(clean_edited_message("# only a comment\n\n   \n"), None);
-        assert_eq!(clean_edited_message(""), None);
-    }
-
-    #[test]
-    fn test_clean_edited_message_keeps_body() {
-        let edited = "feat: add thing\n\n- detail one\n- detail two\n";
-        assert_eq!(
-            clean_edited_message(edited).as_deref(),
-            Some("feat: add thing\n\n- detail one\n- detail two")
-        );
-    }
-}
-
 #[tokio::main]
 async fn main() {
     dotenv().ok(); // Load .env file if it exists
@@ -791,5 +762,34 @@ async fn main() {
                 }
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_clean_edited_message_strips_comments_and_trims() {
+        let edited = "# Please edit your message\nfix: handle empty input\n\n# trailing comment\n";
+        assert_eq!(
+            clean_edited_message(edited).as_deref(),
+            Some("fix: handle empty input")
+        );
+    }
+
+    #[test]
+    fn test_clean_edited_message_empty_returns_none() {
+        assert_eq!(clean_edited_message("# only a comment\n\n   \n"), None);
+        assert_eq!(clean_edited_message(""), None);
+    }
+
+    #[test]
+    fn test_clean_edited_message_keeps_body() {
+        let edited = "feat: add thing\n\n- detail one\n- detail two\n";
+        assert_eq!(
+            clean_edited_message(edited).as_deref(),
+            Some("feat: add thing\n\n- detail one\n- detail two")
+        );
     }
 }

@@ -95,10 +95,159 @@ fn clean_edited_message(edited: &str) -> Option<String> {
     }
 }
 
+/// Handle `cmt hook <install|uninstall>`.
+fn hook_command(args: &[String]) {
+    let repo = match Repository::discover(".") {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("{}", "Error opening git repository:".red().bold());
+            eprintln!("{}", e);
+            process::exit(1);
+        }
+    };
+
+    match args.first().map(String::as_str) {
+        Some("install") => match cmt::hook::install(&repo) {
+            Ok(path) => {
+                println!(
+                    "{}",
+                    format!(
+                        "✓ Installed cmt prepare-commit-msg hook: {}",
+                        path.display()
+                    )
+                    .green()
+                    .bold()
+                );
+                println!(
+                    "{}",
+                    "Plain `git commit` (and IDE/lazygit commit boxes) will now auto-fill the message."
+                        .dimmed()
+                );
+            }
+            Err(e) => {
+                eprintln!("{}", "Error installing hook:".red().bold());
+                eprintln!("{}", e);
+                process::exit(1);
+            }
+        },
+        Some("uninstall") => match cmt::hook::uninstall(&repo) {
+            Ok(true) => println!(
+                "{}",
+                "✓ Removed cmt prepare-commit-msg hook.".green().bold()
+            ),
+            Ok(false) => println!("{}", "No cmt hook was installed.".yellow()),
+            Err(e) => {
+                eprintln!("{}", "Error removing hook:".red().bold());
+                eprintln!("{}", e);
+                process::exit(1);
+            }
+        },
+        _ => {
+            eprintln!("{}", "usage: cmt hook <install|uninstall>".yellow());
+            process::exit(2);
+        }
+    }
+}
+
+/// Git-invoked `prepare-commit-msg` hook: args are [msg_file, source, sha].
+///
+/// Generates a message and writes it into the commit-message file. ALWAYS exits
+/// 0 — a commit-message helper must never block the user's commit.
+async fn prepare_commit_msg(args: &[String]) {
+    let msg_file = match args.first() {
+        Some(f) => f,
+        None => process::exit(0),
+    };
+    let source = args.get(1).map(String::as_str);
+
+    // Only generate for a fresh, source-less commit (not -m/-t/merge/squash/amend).
+    if !cmt::hook::hook_should_generate(source) {
+        process::exit(0);
+    }
+
+    if let Some(message) = generate_for_hook().await {
+        // Prepend the generated message above git's comment block (git strips
+        // the comments on save); never discard whatever git already wrote.
+        let existing = std::fs::read_to_string(msg_file).unwrap_or_default();
+        let combined = format!("{}\n\n{}", message, existing);
+        let _ = std::fs::write(msg_file, combined);
+    }
+    process::exit(0);
+}
+
+/// Best-effort message generation for hook mode. Returns None on any failure
+/// (missing key, no staged changes, API error) so the caller can leave the
+/// commit message untouched rather than blocking the commit.
+async fn generate_for_hook() -> Option<String> {
+    let repo = Repository::discover(".").ok()?;
+    let config = Config::load().unwrap_or_default();
+
+    let repo_root = repo.workdir().unwrap_or_else(|| std::path::Path::new("."));
+    let cmtignore_patterns = load_cmtignore(repo_root);
+
+    let staged = cmt::get_staged_changes(
+        &repo,
+        config.context_lines,
+        config.max_lines_per_file,
+        config.max_line_width,
+        config.max_file_lines,
+        &cmtignore_patterns,
+    )
+    .ok()?;
+
+    let diff = if config.redact {
+        cmt::redact_secrets(&staged.diff_text).0
+    } else {
+        staged.diff_text
+    };
+    if diff.trim().is_empty() {
+        return None;
+    }
+
+    let recent = if config.include_recent_commits {
+        cmt::get_recent_commits(&repo, config.recent_commits_count).unwrap_or_default()
+    } else {
+        String::new()
+    };
+    let branch = get_current_branch(&repo);
+    let readme = get_readme_excerpt(&repo, 50);
+    let template_manager = TemplateManager::new().ok()?;
+
+    let result = generate_commit_message(
+        &config,
+        &diff,
+        &recent,
+        branch.as_deref(),
+        readme.as_deref(),
+        &template_manager,
+    )
+    .await
+    .ok()?;
+
+    Some(result.message)
+}
+
 #[tokio::main]
 async fn main() {
     dotenv().ok(); // Load .env file if it exists
-    let args = Args::new_from(env::args());
+
+    // Subcommand dispatch (kept out of the clap flag struct so plain `cmt` is
+    // unchanged): `cmt hook <install|uninstall>` and the git-invoked
+    // `cmt prepare-commit-msg <file> <source> <sha>`.
+    let argv: Vec<String> = env::args().collect();
+    match argv.get(1).map(String::as_str) {
+        Some("hook") => {
+            hook_command(&argv[2..]);
+            return;
+        }
+        Some("prepare-commit-msg") => {
+            prepare_commit_msg(&argv[2..]).await;
+            return;
+        }
+        _ => {}
+    }
+
+    let args = Args::new_from(argv.into_iter());
 
     // Start pricing fetch in background (will be ready by time generation completes)
     let mut pricing_cache = PricingCache::new();

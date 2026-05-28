@@ -10,6 +10,7 @@ mod cmtignore;
 mod commit;
 mod config;
 mod git;
+pub mod hook;
 pub mod pricing;
 mod progress;
 mod prompts;

@@ -191,6 +191,20 @@ cmt --provider openai -t 0.8
 git commit -F <(cmt -m)
 ```
 
+## Git Hook Integration
+
+Install a `prepare-commit-msg` hook so cmt fills in the message for **plain `git commit`** — including IDE, `git gui`, and lazygit commit boxes — without typing `cmt`:
+
+```bash
+cmt hook install     # from inside the repo
+cmt hook uninstall   # remove it later
+```
+
+- Installs into `core.hooksPath` if set (Husky-compatible), otherwise `.git/hooks`, and coexists with any existing `prepare-commit-msg` hook (its block is marker-delimited).
+- Only fills a **fresh, empty** commit message. It deliberately skips `git commit -m`, `-t <template>`, merges, squashes, and amends so it never clobbers a message you supplied.
+- It **never blocks a commit**: if the API key is missing or the request fails, the hook exits cleanly and leaves the message untouched.
+- Secrets are still redacted (see below) before anything is sent to the model.
+
 ## How It Works
 
 1. `cmt` gathers rich context: README excerpt, branch name, recent commits

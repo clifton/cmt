@@ -34,8 +34,8 @@ pub const AVAILABLE_PROVIDERS: &[&str] = &["claude", "openai", "gemini"];
 pub const DEFAULT_CLAUDE_MODEL: &str = "claude-sonnet-4-5-20250929";
 // Last Verified: 2025-12-29
 pub const DEFAULT_OPENAI_MODEL: &str = "gpt-5.2";
-// Last Verified: 2025-12-29 (use -preview suffix for Gemini 3 models)
-pub const DEFAULT_GEMINI_MODEL: &str = "gemini-3-flash-preview";
+// Last Verified: 2026-05-28 (rstructor 0.2.11's maintained Gemini default - GA, best price/performance)
+pub const DEFAULT_GEMINI_MODEL: &str = "gemini-3.5-flash";
 
 // Available templates
 pub const AVAILABLE_TEMPLATES: &[&str] = &["conventional", "simple", "detailed"];

@@ -20,7 +20,7 @@ pub struct Args {
     #[arg(long, default_value_t = 20)]
     pub context_lines: u32,
 
-    /// Use a specific AI model (defaults to gemini-3-flash-preview, claude-sonnet-4-5-20250929, or gpt-5.2)
+    /// Use a specific AI model (defaults to the selected provider's default model)
     #[arg(long)]
     pub model: Option<String>,
 

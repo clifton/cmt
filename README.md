@@ -7,7 +7,7 @@
 ## Features
 
 - 🤖 Supports multiple AI providers:
-  - Google's Gemini (`gemini-3-flash-preview`, default - fastest & cheapest)
+  - Google's Gemini (`gemini-3.5-flash`, default - fastest & cheapest)
   - Anthropic's Claude (`claude-sonnet-4-5-20250929`)
   - OpenAI's GPT (`gpt-5.2`)
 - 📝 Follows conventional commit format (`type: subject`)
@@ -114,8 +114,8 @@ Options:
       --context-lines <CONTEXT_LINES>
           Number of context lines to show in the git diff [default: 20]
       --model <MODEL>
-          Use a specific AI model (defaults to gemini-3-flash-preview,
-          claude-sonnet-4-5-20250929, or gpt-5.2 depending on provider)
+          Use a specific AI model (defaults to the selected provider's
+          default model: gemini-3.5-flash, claude-sonnet-4-5-20250929, or gpt-5.2)
       --list-models
           List available models for the selected provider
   -t, --temperature <TEMPERATURE>

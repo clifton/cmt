@@ -18,7 +18,7 @@ These are the CORRECT model IDs as of the last verification. Use these EXACTLY:
 | Anthropic | `claude-sonnet-4-5-20250929` | 2025-12-29 |
 | Anthropic | `claude-opus-4-20250514` | 2025-12-29 |
 | OpenAI | `gpt-5.2` | 2025-12-29 |
-| Google | `gemini-3-flash-preview` | 2025-12-29 |
+| Google | `gemini-3.5-flash` | 2026-05-28 |
 
 ## Triggers
 - **Files:** Any file containing model definitions, enums, or provider configurations (e.g., `defaults.rs`, `mod.rs`, `cli.rs`).
@@ -46,7 +46,7 @@ When these triggers are active, you **MUST** follow this protocol before writing
 - **Anthropic:** `claude-{tier}-{version}-{date}` (e.g., `claude-sonnet-4-5-20250929`)
   - **NOTE:** Anthropic API does NOT accept `-latest` aliases. Always use dated versions.
 - **OpenAI:** `gpt-{version}` (e.g., `gpt-5.2`)
-- **Google/Gemini:** `gemini-{version}-{variant}` with `-preview` suffix for newer models (e.g., `gemini-3-flash-preview`)
+- **Google/Gemini:** `gemini-{version}-{variant}`; GA Flash models drop the `-preview` suffix (e.g., `gemini-3.5-flash`). Preview IDs (e.g., `gemini-3-flash-preview`) are interim and get retired once the GA model ships.
 
 ## Standard Provider Docs
 Use these sources for verification:
@@ -63,4 +63,4 @@ If search results only show marketing names (e.g., "Claude Sonnet 4" without the
 DO NOT USE these old model IDs:
 - ❌ `gpt-4o`, `gpt-4.1-mini`, `gpt-4o-2024-08-06` → Use `gpt-5.2`
 - ❌ `claude-sonnet-4-20250514`, `claude-3-5-sonnet-*` → Use `claude-sonnet-4-5-20250929`
-- ❌ `gemini-2.5-flash`, `gemini-1.5-*` → Use `gemini-3-flash-preview`
+- ❌ `gemini-2.5-flash`, `gemini-1.5-*`, `gemini-3-flash-preview` → Use `gemini-3.5-flash`

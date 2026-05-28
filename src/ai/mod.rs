@@ -56,13 +56,17 @@ impl ThinkingLevel {
 /// Available AI providers
 pub const PROVIDERS: &[&str] = &["claude", "openai", "gemini"];
 
-/// Default models for each provider
+/// Default models for each provider.
+///
+/// Single source of truth: these reference the constants in [`crate::config::defaults`]
+/// so the model strings live in exactly one place and cannot drift.
 pub fn default_model(provider: &str) -> &'static str {
+    use crate::config::defaults;
     match provider.to_lowercase().as_str() {
-        "claude" => "claude-sonnet-4-5-20250929",
-        "openai" => "gpt-5.2",
-        "gemini" => "gemini-3-flash-preview",
-        _ => "gpt-5.2",
+        "claude" => defaults::DEFAULT_CLAUDE_MODEL,
+        "openai" => defaults::DEFAULT_OPENAI_MODEL,
+        "gemini" => defaults::DEFAULT_GEMINI_MODEL,
+        _ => defaults::DEFAULT_OPENAI_MODEL,
     }
 }
 
@@ -304,9 +308,13 @@ mod tests {
 
     #[test]
     fn test_default_models() {
-        assert_eq!(default_model("claude"), "claude-sonnet-4-5-20250929");
-        assert_eq!(default_model("openai"), "gpt-5.2");
-        assert_eq!(default_model("gemini"), "gemini-3-flash-preview");
+        use crate::config::defaults;
+        // default_model() must stay in sync with the constants (single source of truth).
+        assert_eq!(default_model("claude"), defaults::DEFAULT_CLAUDE_MODEL);
+        assert_eq!(default_model("openai"), defaults::DEFAULT_OPENAI_MODEL);
+        assert_eq!(default_model("gemini"), defaults::DEFAULT_GEMINI_MODEL);
+        // The Gemini default is the maintained GA Flash model.
+        assert_eq!(default_model("gemini"), "gemini-3.5-flash");
     }
 
     #[test]

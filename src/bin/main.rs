@@ -306,7 +306,24 @@ async fn main() {
         }
     }
 
-    let staged_changes = staged.diff_text.clone();
+    // Scrub likely secrets from the diff before it ever leaves the machine.
+    let staged_changes = if config.redact {
+        let (scrubbed, redacted) = cmt::redact_secrets(&staged.diff_text);
+        if redacted > 0 && !config.message_only {
+            eprintln!(
+                "{}",
+                format!(
+                    "🔒 Redacted {} likely secret{} from the diff before sending it to the model (disable with --no-redact).",
+                    redacted,
+                    if redacted == 1 { "" } else { "s" }
+                )
+                .yellow()
+            );
+        }
+        scrubbed
+    } else {
+        staged.diff_text.clone()
+    };
 
     // Determine diff size for adaptive behaviors (very high thresholds - Gemini supports 1M tokens)
     let is_very_large_diff = staged.stats.files_changed > 150

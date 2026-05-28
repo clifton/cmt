@@ -16,6 +16,10 @@ pub struct Args {
     #[arg(long, default_value_t = false)]
     pub show_raw_diff: bool,
 
+    /// Do not scrub likely secrets (API keys, tokens, private keys) from the diff
+    #[arg(long, default_value_t = false)]
+    pub no_redact: bool,
+
     /// Number of context lines to show in the git diff
     #[arg(long, default_value_t = 20)]
     pub context_lines: u32,

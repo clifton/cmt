@@ -1,8 +1,8 @@
 pub use crate::config::cli::Args;
 pub use crate::config::Config;
 pub use crate::git::{
-    get_current_branch, get_readme_excerpt, get_recent_commits, get_staged_changes, DiffStats,
-    StagedChanges,
+    get_current_branch, get_readme_excerpt, get_recent_commits, get_staged_changes,
+    has_unstaged_changes, stage_tracked_changes, DiffStats, StagedChanges,
 };
 
 mod ai;

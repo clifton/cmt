@@ -18,6 +18,110 @@ enum CommitAction {
     Commit,
     Cancel,
     Hint,
+    Edit,
+}
+
+/// Open `message` in the user's editor and return the edited text.
+///
+/// Resolves the editor like git does (GIT_EDITOR -> core.editor -> VISUAL ->
+/// EDITOR -> vi), strips comment lines, and returns None if the editor failed
+/// or the message was emptied (in which case the previous message is kept).
+fn edit_in_editor(message: &str) -> Option<String> {
+    use std::process::Command;
+
+    let editor = std::env::var("GIT_EDITOR")
+        .ok()
+        .filter(|s| !s.trim().is_empty())
+        .or_else(|| {
+            Command::new("git")
+                .args(["config", "--get", "core.editor"])
+                .output()
+                .ok()
+                .filter(|o| o.status.success())
+                .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+                .filter(|s| !s.is_empty())
+        })
+        .or_else(|| {
+            std::env::var("VISUAL")
+                .ok()
+                .filter(|s| !s.trim().is_empty())
+        })
+        .or_else(|| {
+            std::env::var("EDITOR")
+                .ok()
+                .filter(|s| !s.trim().is_empty())
+        })
+        .unwrap_or_else(|| "vi".to_string());
+
+    let mut tmp = tempfile::Builder::new()
+        .prefix("CMT_EDITMSG_")
+        .suffix(".txt")
+        .tempfile()
+        .ok()?;
+    write!(tmp, "{}", message).ok()?;
+    let path = tmp.into_temp_path();
+
+    // The editor string may carry args (e.g. "code --wait"); split it.
+    let mut parts = editor.split_whitespace();
+    let program = parts.next()?;
+    let mut cmd = Command::new(program);
+    for arg in parts {
+        cmd.arg(arg);
+    }
+    cmd.arg(&path);
+    let status = cmd.status().ok()?;
+    if !status.success() {
+        return None;
+    }
+
+    let edited = std::fs::read_to_string(&path).ok()?;
+    clean_edited_message(&edited)
+}
+
+/// Strip comment lines (`#…`) and surrounding whitespace from an edited message.
+/// Returns None if nothing meaningful remains.
+fn clean_edited_message(edited: &str) -> Option<String> {
+    let cleaned = edited
+        .lines()
+        .filter(|l| !l.trim_start().starts_with('#'))
+        .collect::<Vec<_>>()
+        .join("\n")
+        .trim()
+        .to_string();
+    if cleaned.is_empty() {
+        None
+    } else {
+        Some(cleaned)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_clean_edited_message_strips_comments_and_trims() {
+        let edited = "# Please edit your message\nfix: handle empty input\n\n# trailing comment\n";
+        assert_eq!(
+            clean_edited_message(edited).as_deref(),
+            Some("fix: handle empty input")
+        );
+    }
+
+    #[test]
+    fn test_clean_edited_message_empty_returns_none() {
+        assert_eq!(clean_edited_message("# only a comment\n\n   \n"), None);
+        assert_eq!(clean_edited_message(""), None);
+    }
+
+    #[test]
+    fn test_clean_edited_message_keeps_body() {
+        let edited = "feat: add thing\n\n- detail one\n- detail two\n";
+        assert_eq!(
+            clean_edited_message(edited).as_deref(),
+            Some("feat: add thing\n\n- detail one\n- detail two")
+        );
+    }
 }
 
 #[tokio::main]
@@ -218,15 +322,63 @@ async fn main() {
     // Get staged changes (includes both diff text and stats in one pass).
     // Read from the resolved `config` (defaults < global < project < CLI), not
     // raw `args`, so .cmt.toml settings actually take effect.
-    let staged = match cmt::get_staged_changes(
-        &repo,
-        config.context_lines,
-        config.max_lines_per_file,
-        config.max_line_width,
-        config.max_file_lines,
-        &cmtignore_patterns,
-    ) {
+    let get_staged = || {
+        cmt::get_staged_changes(
+            &repo,
+            config.context_lines,
+            config.max_lines_per_file,
+            config.max_line_width,
+            config.max_file_lines,
+            &cmtignore_patterns,
+        )
+    };
+
+    let staged = match get_staged() {
         Ok(changes) => changes,
+        Err(e) if e.to_string().contains("No changes have been staged") => {
+            // Nothing staged — offer to stage tracked changes instead of
+            // dead-ending (the most common first-run frustration).
+            let unstaged = cmt::has_unstaged_changes(&repo);
+            let do_stage = if args.all {
+                unstaged
+            } else if unstaged && interactive && !args.yes {
+                print!(
+                    "{}",
+                    "Nothing staged. Stage all tracked changes and continue? [y/N] ".cyan()
+                );
+                let _ = io::stdout().flush();
+                let mut input = String::new();
+                io::stdin().read_line(&mut input).is_ok()
+                    && matches!(input.trim().to_lowercase().as_str(), "y" | "yes")
+            } else {
+                false
+            };
+
+            if do_stage {
+                if let Err(err) = cmt::stage_tracked_changes(&repo) {
+                    eprintln!("{}", "Error staging changes:".red().bold());
+                    eprintln!("{}", err);
+                    process::exit(1);
+                }
+                match get_staged() {
+                    Ok(changes) => changes,
+                    Err(err) => {
+                        eprintln!("{}", "Error:".red().bold());
+                        eprintln!("{}", err);
+                        process::exit(1);
+                    }
+                }
+            } else {
+                eprintln!("{}", "No changes have been staged for commit.".red().bold());
+                if unstaged {
+                    eprintln!(
+                        "{}",
+                        "You have unstaged changes — stage them, or re-run with -a/--all.".yellow()
+                    );
+                }
+                process::exit(1);
+            }
+        }
         Err(e) => {
             eprintln!("{}", "Error:".red().bold());
             eprintln!("{}", e);
@@ -514,7 +666,7 @@ async fn main() {
                     // Prompt for action
                     print!(
                         "{}",
-                        "[y]es to commit, [n]o to cancel, [h]int to regenerate: ".cyan()
+                        "[y]es to commit, [e]dit, [n]o to cancel, [h]int to regenerate: ".cyan()
                     );
                     let _ = io::stdout().flush();
 
@@ -523,6 +675,7 @@ async fn main() {
                         let input = input.trim().to_lowercase();
                         match input.as_str() {
                             "y" | "yes" => CommitAction::Commit,
+                            "e" | "edit" => CommitAction::Edit,
                             "n" | "no" | "" => CommitAction::Cancel,
                             "h" | "hint" => CommitAction::Hint,
                             _ => CommitAction::Cancel,
@@ -577,6 +730,21 @@ async fn main() {
                         println!("{}", "Commit cancelled.".yellow());
                         break;
                     }
+                    CommitAction::Edit => match edit_in_editor(&current_message) {
+                        Some(edited) => {
+                            current_message = edited;
+                            println!();
+                            println!("{}", "Commit message:".green().bold());
+                            println!("{}", current_message);
+                        }
+                        None => {
+                            eprintln!(
+                                "{}",
+                                "Edit discarded (empty or editor failed); keeping the message."
+                                    .yellow()
+                            );
+                        }
+                    },
                     CommitAction::Hint => {
                         // Prompt for hint
                         print!("{}", "Enter hint: ".cyan());

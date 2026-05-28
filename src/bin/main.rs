@@ -95,6 +95,82 @@ fn clean_edited_message(edited: &str) -> Option<String> {
     }
 }
 
+/// Copy `message` to the system clipboard. When `announce`, prints a confirmation.
+fn copy_to_clipboard(message: &str, announce: bool) {
+    match Clipboard::new() {
+        Ok(mut clipboard) => {
+            if let Err(e) = clipboard.set_text(message) {
+                eprintln!(
+                    "{}",
+                    format!("Warning: Failed to copy to clipboard: {}", e)
+                        .yellow()
+                        .bold()
+                );
+            } else if announce {
+                println!("{}", "✓ Copied to clipboard".green());
+            }
+        }
+        Err(e) => {
+            eprintln!(
+                "{}",
+                format!("Warning: Failed to access clipboard: {}", e)
+                    .yellow()
+                    .bold()
+            );
+        }
+    }
+}
+
+/// Print the generated message with token/cost stats, and copy it if requested.
+/// Called for the initial generation and after every hint regeneration so the
+/// displayed cost and the clipboard never go stale.
+#[allow(clippy::too_many_arguments)]
+fn present_and_copy(
+    message: &str,
+    input_tokens: Option<u64>,
+    output_tokens: Option<u64>,
+    elapsed: std::time::Duration,
+    provider: &str,
+    model: &str,
+    pricing_cache: &mut PricingCache,
+    diff_len: usize,
+    recent_len: usize,
+    copy: bool,
+) {
+    println!("{}", "Commit message:".green().bold());
+    println!("{}", message);
+
+    // Use actual token counts from the API, or estimate (~4 chars/token).
+    let (input, output) = match (input_tokens, output_tokens) {
+        (Some(i), Some(o)) => (i, o),
+        _ => (
+            ((diff_len + recent_len) as u64) / 4,
+            (message.len() as u64) / 4,
+        ),
+    };
+    let cost_str = pricing_cache
+        .get_model_pricing(provider, model)
+        .and_then(|p| pricing::calculate_cost(&p, input, output))
+        .map(|c| format!(", {}", pricing::format_cost(c)))
+        .unwrap_or_default();
+    let prefix = if input_tokens.is_some() { "" } else { "~" };
+    println!(
+        "{}",
+        format!(
+            "{}{} tokens, {:.1}s{}",
+            prefix,
+            input + output,
+            elapsed.as_secs_f32(),
+            cost_str
+        )
+        .dimmed()
+    );
+
+    if copy {
+        copy_to_clipboard(message, true);
+    }
+}
+
 #[tokio::main]
 async fn main() {
     dotenv().ok(); // Load .env file if it exists
@@ -547,73 +623,26 @@ async fn main() {
     let elapsed = start_time.elapsed();
     let commit_message = result.message;
 
-    // Copy to clipboard if requested
-    if args.copy {
-        match Clipboard::new() {
-            Ok(mut clipboard) => {
-                if let Err(e) = clipboard.set_text(&commit_message) {
-                    eprintln!(
-                        "{}",
-                        format!("Warning: Failed to copy to clipboard: {}", e)
-                            .yellow()
-                            .bold()
-                    );
-                } else if !config.message_only {
-                    println!("{}", "✓ Copied to clipboard".green());
-                }
-            }
-            Err(e) => {
-                eprintln!(
-                    "{}",
-                    format!("Warning: Failed to access clipboard: {}", e)
-                        .yellow()
-                        .bold()
-                );
-            }
-        }
-    }
-
     // Output the commit message
     if config.message_only {
-        // Output just the message for piping to git commit
+        // Output just the message for piping to git commit (copy silently so
+        // the "✓ Copied" line never pollutes the piped output).
+        if args.copy {
+            copy_to_clipboard(&commit_message, false);
+        }
         print!("{}", commit_message);
     } else {
-        // Show the generated commit message
-        println!("{}", "Commit message:".green().bold());
-        println!("{}", commit_message);
-
-        // Use actual token counts from API, or estimate if not available
-        let (input_tokens, output_tokens) = match (result.input_tokens, result.output_tokens) {
-            (Some(input), Some(output)) => (input, output),
-            _ => {
-                // Fallback: estimate ~4 chars per token
-                let est_input = (staged_changes.len() + recent_commits.len()) as u64 / 4;
-                let est_output = commit_message.len() as u64 / 4;
-                (est_input, est_output)
-            }
-        };
-        let total_tokens = input_tokens + output_tokens;
-        let elapsed_secs = elapsed.as_secs_f32();
-
-        let cost_str = pricing_cache
-            .get_model_pricing(&config.provider, &model_name)
-            .and_then(|p| pricing::calculate_cost(&p, input_tokens, output_tokens))
-            .map(|c| format!(", {}", pricing::format_cost(c)))
-            .unwrap_or_default();
-
-        // Show ~ prefix only if we're estimating
-        let token_prefix = if result.input_tokens.is_some() {
-            ""
-        } else {
-            "~"
-        };
-        println!(
-            "{}",
-            format!(
-                "{}{} tokens, {:.1}s{}",
-                token_prefix, total_tokens, elapsed_secs, cost_str
-            )
-            .dimmed()
+        present_and_copy(
+            &commit_message,
+            result.input_tokens,
+            result.output_tokens,
+            elapsed,
+            &config.provider,
+            &model_name,
+            &mut pricing_cache,
+            staged_changes.len(),
+            recent_commits.len(),
+            args.copy,
         );
 
         // Handle commit prompt (default behavior unless --no-commit)
@@ -629,6 +658,9 @@ async fn main() {
             // Clone the resolved config so hint regeneration can layer in a hint
             // without mutating the original.
             let mut current_config = config.clone();
+            // Hints accumulate across regenerations so a later hint refines
+            // rather than erases an earlier one.
+            let mut hints: Vec<String> = Vec::new();
 
             loop {
                 let action = if args.yes {
@@ -725,9 +757,12 @@ async fn main() {
                         if io::stdin().read_line(&mut hint_input).is_ok() {
                             let hint = hint_input.trim();
                             if !hint.is_empty() {
-                                current_config.hint = Some(hint.to_string());
+                                // Accumulate hints so they compound across rounds.
+                                hints.push(hint.to_string());
+                                current_config.hint = Some(hints.join("; "));
 
                                 // Regenerate with spinner
+                                let regen_start = Instant::now();
                                 let spinner =
                                     Spinner::new(&format!("Regenerating with {}...", model_name));
                                 match generate_commit_message(
@@ -742,10 +777,22 @@ async fn main() {
                                 {
                                     Ok(new_result) => {
                                         spinner.finish_and_clear();
-                                        current_message = new_result.message;
+                                        current_message = new_result.message.clone();
                                         println!();
-                                        println!("{}", "Commit message:".green().bold());
-                                        println!("{}", current_message);
+                                        // Re-show with fresh token/cost stats and
+                                        // re-copy, so neither goes stale after a hint.
+                                        present_and_copy(
+                                            &current_message,
+                                            new_result.input_tokens,
+                                            new_result.output_tokens,
+                                            regen_start.elapsed(),
+                                            &config.provider,
+                                            &model_name,
+                                            &mut pricing_cache,
+                                            staged_changes.len(),
+                                            recent_commits.len(),
+                                            args.copy,
+                                        );
                                     }
                                     Err(e) => {
                                         spinner.finish_and_clear();

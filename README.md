@@ -11,7 +11,7 @@
   - Anthropic's Claude (`claude-sonnet-4-5-20250929`)
   - OpenAI's GPT (`gpt-5.2`)
 - 📝 Follows conventional commit format (`type: subject`)
-- 🧠 Rich context: README, branch name, recent commits, full diff analysis
+- 🧠 Rich context: README, branch name, recent commits, full staged diff
 - 💡 Contextual hints to guide message generation
 - ✅ Interactive commit prompt by default
 - 📋 Copy to clipboard with `-c/--copy`
@@ -194,7 +194,7 @@ git commit -F <(cmt -m)
 ## How It Works
 
 1. `cmt` gathers rich context: README excerpt, branch name, recent commits
-2. Analyzes staged changes to suggest commit type
+2. Reads the full staged diff (the model classifies the commit type directly)
 3. Sends full context + diff to the AI using [rstructor](https://github.com/clifton/rstructor) for structured output
 4. Shows stats (tokens, time, estimated cost)
 5. You review and confirm (or regenerate with a hint)

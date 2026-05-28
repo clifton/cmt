@@ -1,11 +1,11 @@
 pub use crate::config::cli::Args;
+pub use crate::config::Config;
 pub use crate::git::{
     get_current_branch, get_readme_excerpt, get_recent_commits, get_staged_changes, DiffStats,
     StagedChanges,
 };
 
 mod ai;
-mod analysis;
 mod cmtignore;
 mod commit;
 mod config;
@@ -21,8 +21,6 @@ pub use commit::{create_commit, CommitError, CommitOptions, CommitResult};
 
 pub use pricing::PricingCache;
 pub use progress::Spinner;
-
-pub use analysis::{analyze_diff, DiffAnalysis};
 
 use templates::{CommitTemplate, TemplateManager};
 
@@ -94,27 +92,26 @@ fn validate_commit_data(mut data: CommitTemplate) -> CommitTemplate {
 }
 
 pub async fn generate_commit_message(
-    args: &Args,
+    config: &Config,
     git_diff: &str,
     recent_commits: &str,
-    analysis: Option<&DiffAnalysis>,
     branch_name: Option<&str>,
     readme_excerpt: Option<&str>,
     template_manager: &TemplateManager,
 ) -> Result<GenerateResult, Box<dyn std::error::Error>> {
-    let template_name = args
+    let template_name = config
         .template
         .clone()
-        .unwrap_or_else(|| config::defaults::DEFAULT_TEMPLATE.to_string());
+        .unwrap_or_else(|| crate::config::defaults::DEFAULT_TEMPLATE.to_string());
 
     // Get provider name
-    let provider_name = &args.provider;
+    let provider_name = &config.provider;
 
     // Check if the provider is available (has API key)
     ai::check_available(provider_name)?;
 
     // Get the model name, defaulting to the provider's default model
-    let model = args
+    let model = config
         .model
         .clone()
         .unwrap_or_else(|| ai::default_model(provider_name).to_string());
@@ -136,30 +133,28 @@ pub async fn generate_commit_message(
         }
     }
 
-    if !args.no_recent_commits && !recent_commits.is_empty() {
+    if config.include_recent_commits && !recent_commits.is_empty() {
         prompt.push_str("\nRecent commits for context:\n");
         prompt.push_str(recent_commits);
     }
 
-    // Generate analysis summary if available
-    let analysis_summary = analysis.map(|a| a.summary());
-    prompt.push_str(&prompts::user_prompt(git_diff, analysis_summary.as_deref()));
+    prompt.push_str(&prompts::user_prompt(git_diff));
 
     // Build the system prompt
     let mut system_prompt = prompts::system_prompt();
-    if let Some(hint) = &args.hint {
+    if let Some(hint) = &config.hint {
         system_prompt = format!("{}\n\nAdditional context: {}", system_prompt, hint);
     }
 
     // Generate the commit message
-    let temperature = args.temperature.unwrap_or(ai::DEFAULT_TEMPERATURE);
+    let temperature = config.temperature.unwrap_or(ai::DEFAULT_TEMPERATURE);
 
     // Parse thinking level (default to Off for Claude due to max_tokens/budget_tokens issue)
-    let thinking_level = if provider_name == "claude" && args.thinking == "low" {
+    let thinking_level = if provider_name == "claude" && config.thinking == "low" {
         // Claude's default should be Off until rstructor handles max_tokens properly
         Some(ai::ThinkingLevel::Off)
     } else {
-        Some(ai::ThinkingLevel::parse(&args.thinking))
+        Some(ai::ThinkingLevel::parse(&config.thinking))
     };
 
     // Try to complete the prompt with structured output
@@ -245,11 +240,11 @@ mod tests {
                 .map(ToString::to_string),
         );
 
+        let config = Config::from_args(&args);
         let template_manager = TemplateManager::new().unwrap();
 
         // Call generate_commit_message with the unsupported provider
-        let result =
-            generate_commit_message(&args, "", "", None, None, None, &template_manager).await;
+        let result = generate_commit_message(&config, "", "", None, None, &template_manager).await;
 
         // Verify that an error is returned
         assert!(result.is_err());
@@ -282,11 +277,11 @@ mod tests {
                 .map(ToString::to_string),
         );
 
+        let config = Config::from_args(&args);
         let template_manager = TemplateManager::new().unwrap();
 
         // Call generate_commit_message with the claude provider
-        let result =
-            generate_commit_message(&args, "", "", None, None, None, &template_manager).await;
+        let result = generate_commit_message(&config, "", "", None, None, &template_manager).await;
 
         // Verify that an error is returned
         assert!(result.is_err());

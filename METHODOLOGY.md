@@ -14,23 +14,14 @@ This document describes how `cmt` assembles git diff context and sends it to the
 └─────────────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────────────┐
-│ 2. SEMANTIC ANALYSIS (src/analysis.rs)                          │
-│    ├─ Categorize files (source, test, docs, config, ci, build) │
-│    ├─ Count: insertions/deletions per category                 │
-│    ├─ Suggest: commit type based on patterns                   │
-│    └─ Generate: markdown summary for LLM                       │
-└─────────────────────────────────────────────────────────────────┘
-                            ↓
-┌─────────────────────────────────────────────────────────────────┐
-│ 3. PROMPT ASSEMBLY (src/lib.rs + src/prompts/)                  │
+│ 2. PROMPT ASSEMBLY (src/lib.rs + src/prompts/)                  │
 │    ├─ Prepend: README excerpt + branch name + recent commits   │
-│    ├─ Insert: semantic analysis summary                        │
 │    ├─ Append: unified diff (the {{changes}} payload)           │
 │    └─ System: prompt + optional user hint                      │
 └─────────────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────────────┐
-│ 4. LLM API CALL (src/ai/mod.rs)                                 │
+│ 3. LLM API CALL (src/ai/mod.rs)                                 │
 │    ├─ Check: provider availability + API key                   │
 │    ├─ Route: to Claude, OpenAI, or Gemini                      │
 │    ├─ Request: structured output via rstructor                 │
@@ -38,7 +29,7 @@ This document describes how `cmt` assembles git diff context and sends it to the
 └─────────────────────────────────────────────────────────────────┘
                             ↓
 ┌─────────────────────────────────────────────────────────────────┐
-│ 5. POST-PROCESSING (src/lib.rs + src/templates.rs)              │
+│ 4. POST-PROCESSING (src/lib.rs + src/templates.rs)              │
 │    ├─ Validate: lowercase subject, remove trailing period      │
 │    ├─ Clean: scope (lowercase, remove generic values)          │
 │    ├─ Deduplicate: remove details that echo subject            │
@@ -139,40 +130,18 @@ Staged: 12 files +102850 -9883
   migrations/target_schema.sql                  +102607 -9738  ~
 ```
 
-## 3. Semantic Analysis
+## 3. Semantic Analysis (removed)
 
-**Source:** `src/analysis.rs` - `analyze_diff()` function
+Earlier versions ran a *second* diff through `src/analysis.rs` to categorize
+files and emit a "Pre-Analysis" block — a suggested commit type plus per-category
+insertion/deletion counts — into the prompt.
 
-### File Categorization
-
-| Category | Examples |
-|----------|----------|
-| Source | `.rs`, `.go`, `.py`, `.js`, `.ts`, `.java`, `.c`, `.cpp`, `.rb`, `.php` |
-| Test | `_test.rs`, `.test.js`, `.spec.ts`, `tests/`, `test/` directories |
-| Docs | `.md`, `.rst`, `docs/`, `README`, `CHANGELOG` |
-| Config | `Cargo.toml`, `package.json`, `.yaml`, `.toml`, `.json` |
-| CI | `.github/workflows/`, `.gitlab-ci.yml`, `.travis.yml` |
-| Build | `Dockerfile`, `Makefile`, `build.rs`, `CMakeLists.txt` |
-
-### Commit Type Suggestion
-
-Priority-based suggestions generated from file analysis:
-
-| Signal | Type | Condition |
-|--------|------|-----------|
-| Strong | `docs` | Only documentation files changed |
-| Strong | `ci` | Only CI/CD configuration changed |
-| Strong | `test` | Only test files changed |
-| Strong | `build` | Only build files changed |
-| Strong | `chore` | Only config/dependencies changed |
-| Strong | `refactor` | Only file renames |
-| Weak | `feat` | New source files added |
-| Weak | `refactor` | Only deletions |
-
-### Scope Detection
-
-- Only for monorepos with `packages/`, `apps/`, `libs/` directories
-- Suggested when >80% of changes are in the same component
+This layer has been **removed**. The model already reads the full diff, so the
+heuristic block duplicated its judgment, diverged from the diff actually shown
+(the analysis ignored `.cmtignore` and most of `is_skippable`), and could anchor
+the model toward volume-based labels that `system_prompt.txt` explicitly forbids
+("Classify by IMPACT, not volume"). Commit-type classification now relies solely
+on the diff plus the schema's `CommitType` taxonomy (`src/templates.rs`).
 
 ## 4. Prompt Construction
 
@@ -183,8 +152,7 @@ Priority-based suggestions generated from file analysis:
 1. **README excerpt** - First 50 lines of project README.md
 2. **Branch name** - Current branch (omitted for `main`, `master`, or detached HEAD)
 3. **Recent commits** - Last N commits for style context (default: 10, skipped for extremely large diffs)
-4. **Pre-analysis summary** - Markdown summary from semantic analysis
-5. **Diff text** - The `{{changes}}` payload with full unified diff
+4. **Diff text** - The `{{changes}}` payload with full unified diff
 
 ### System Prompt
 
@@ -292,31 +260,6 @@ Recent commits for context:
 [4] docs: update API documentation
 [5] test: add integration tests for auth
 
-# Pre-Analysis of Changes
-
-The following analysis was generated automatically from the diff.
-Use this to inform your commit type selection, but always verify by reading the actual diff.
-
-## Change Summary
-
-2 files changed: +45 insertions, -12 deletions
-
-## Files by Category
-
-- source: 2 files (1 added, 1 modified) [+45/-12]
-
-## Changed Files
-
-+ src/auth/login.rs [source]
-~ src/auth/mod.rs [source]
-
-## Analysis Hints
-
-WEAK SIGNAL: Consider 'feat' - new source files added
-- 1 new source file added
-
----
-
 Generate a professional commit message for this diff:
 
 ```diff
@@ -367,11 +310,10 @@ index 1234567..89abcde 100644
 ```
 
 Instructions:
-1. If pre-analysis was provided above, use it to help select the commit type
-2. ALWAYS verify by reading the actual diff - the analysis is a hint, not a rule
-3. Focus on the PRIMARY purpose of the change (what problem does it solve?)
-4. For the subject line: be specific, use present tense, max 50 chars
-5. For details: explain WHY, not just WHAT changed
+1. Read the actual diff carefully to determine the change's intent
+2. Focus on the PRIMARY purpose of the change (what problem does it solve?)
+3. For the subject line: be specific, use present tense, max 50 chars
+4. For details: explain WHY, not just WHAT changed
 
 Remember the type priority hierarchy:
 fix > feat > perf > refactor > test > build > ci > chore > style > docs
@@ -384,25 +326,6 @@ A one-line bug fix with extensive docs = "fix", not "docs"
 When README is missing, branch is `main`, and no recent commits:
 
 ```
-# Pre-Analysis of Changes
-
-The following analysis was generated automatically from the diff.
-Use this to inform your commit type selection, but always verify by reading the actual diff.
-
-## Change Summary
-
-1 file changed: +5 insertions, -2 deletions
-
-## Files by Category
-
-- source: 1 file (modified) [+5/-2]
-
-## Changed Files
-
-~ src/main.rs [source]
-
----
-
 Generate a professional commit message for this diff:
 
 ```diff
@@ -426,11 +349,10 @@ index abc1234..def5678 100644
 ```
 
 Instructions:
-1. If pre-analysis was provided above, use it to help select the commit type
-2. ALWAYS verify by reading the actual diff - the analysis is a hint, not a rule
-3. Focus on the PRIMARY purpose of the change (what problem does it solve?)
-4. For the subject line: be specific, use present tense, max 50 chars
-5. For details: explain WHY, not just WHAT changed
+1. Read the actual diff carefully to determine the change's intent
+2. Focus on the PRIMARY purpose of the change (what problem does it solve?)
+3. For the subject line: be specific, use present tense, max 50 chars
+4. For details: explain WHY, not just WHAT changed
 
 Remember the type priority hierarchy:
 fix > feat > perf > refactor > test > build > ci > chore > style > docs

@@ -8,8 +8,12 @@ use rstructor::{
 use std::error::Error;
 use std::time::Duration;
 
-/// Default temperature for commit message generation
-pub const DEFAULT_TEMPERATURE: f32 = 0.3;
+/// Default temperature for commit message generation.
+///
+/// Low by design: this is a structured, validated extraction task (classify the
+/// change + summarize it), so determinism matters more than variety. The
+/// `--temperature` flag / `temperature` config key still override it.
+pub const DEFAULT_TEMPERATURE: f32 = 0.2;
 
 /// Result of a completion request, including token usage
 #[derive(Debug)]

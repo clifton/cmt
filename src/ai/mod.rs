@@ -1,8 +1,12 @@
 //! AI provider module using rstructor for structured LLM outputs
 
 use crate::templates::CommitTemplate;
-use rstructor::{LLMClient, ModelInfo, ThinkingLevel as RstructorThinkingLevel, TokenUsage};
+use rstructor::{
+    ApiErrorKind, LLMClient, ModelInfo, RStructorError, ThinkingLevel as RstructorThinkingLevel,
+    TokenUsage,
+};
 use std::error::Error;
+use std::time::Duration;
 
 /// Default temperature for commit message generation
 pub const DEFAULT_TEMPERATURE: f32 = 0.3;
@@ -100,8 +104,25 @@ pub fn check_available(provider: &str) -> Result<(), AiError> {
     Ok(())
 }
 
-/// Generate a structured commit template from the AI provider
-/// Returns the template along with token usage information
+/// Normalize the thinking level for a provider's quirks.
+///
+/// Claude's structured-output path is unreliable with `low` thinking under
+/// rstructor's current max_tokens/budget_tokens handling, so coerce `Low` to
+/// `Off` for Claude. This lives here (next to the provider call) rather than in
+/// the generation logic so all provider quirks are in one place.
+fn normalize_thinking(provider: &str, level: ThinkingLevel) -> ThinkingLevel {
+    if provider.eq_ignore_ascii_case("claude") && level == ThinkingLevel::Low {
+        ThinkingLevel::Off
+    } else {
+        level
+    }
+}
+
+/// Generate a structured commit template from the AI provider.
+///
+/// Returns the template along with token usage information. Each provider's
+/// HTTP request is bounded by `timeout_secs` so a hung endpoint can't stall the
+/// tool indefinitely; rstructor retries transient (429/5xx) failures internally.
 pub async fn complete_structured(
     provider: &str,
     model: &str,
@@ -109,96 +130,49 @@ pub async fn complete_structured(
     system_prompt: &str,
     user_prompt: &str,
     thinking_level: Option<ThinkingLevel>,
+    timeout_secs: u64,
 ) -> Result<CompletionResult, Box<dyn Error>> {
     // Check provider is available
     check_available(provider)?;
 
-    let thinking = thinking_level.unwrap_or_default().as_rstructor();
+    let thinking = normalize_thinking(provider, thinking_level.unwrap_or_default()).as_rstructor();
 
     // Build prompt combining system and user prompts
     let full_prompt = format!("{}\n\n{}", system_prompt, user_prompt);
+    let timeout = Duration::from_secs(timeout_secs);
 
-    // Execute the appropriate provider
+    use rstructor::{AnthropicClient, GeminiClient, OpenAIClient};
+
+    // The three clients are distinct concrete types but share an identical call
+    // shape; a macro collapses them into one body so cross-cutting concerns
+    // (timeout, error mapping) live in exactly one place.
+    macro_rules! materialize_with {
+        ($Client:ty) => {{
+            let client = <$Client>::from_env()
+                .map_err(|e| Box::new(e) as Box<dyn Error>)?
+                .model(model)
+                .temperature(temperature)
+                .thinking_level(thinking)
+                .timeout(timeout);
+            client
+                .materialize_with_metadata::<CommitTemplate>(&full_prompt)
+                .await
+                .map(|r| CompletionResult {
+                    template: r.data,
+                    usage: r.usage,
+                })
+                .map_err(|e| Box::new(map_rstructor_error(e, model)) as Box<dyn Error>)
+        }};
+    }
+
     match provider.to_lowercase().as_str() {
-        "claude" => complete_claude(model, temperature, &full_prompt, thinking).await,
-        "openai" => complete_openai(model, temperature, &full_prompt, thinking).await,
-        "gemini" => complete_gemini(model, temperature, &full_prompt, thinking).await,
+        "claude" => materialize_with!(AnthropicClient),
+        "openai" => materialize_with!(OpenAIClient),
+        "gemini" => materialize_with!(GeminiClient),
         _ => Err(Box::new(AiError::ProviderNotFound {
             provider_name: provider.to_string(),
         }) as Box<dyn Error>),
     }
-}
-
-async fn complete_claude(
-    model: &str,
-    temperature: f32,
-    prompt: &str,
-    thinking: RstructorThinkingLevel,
-) -> Result<CompletionResult, Box<dyn Error>> {
-    use rstructor::AnthropicClient;
-
-    let client = AnthropicClient::from_env()?
-        .model(model)
-        .temperature(temperature)
-        .thinking_level(thinking);
-
-    let result = client
-        .materialize_with_metadata::<CommitTemplate>(prompt)
-        .await
-        .map_err(|e| map_rstructor_error(e, model))?;
-
-    Ok(CompletionResult {
-        template: result.data,
-        usage: result.usage,
-    })
-}
-
-async fn complete_openai(
-    model: &str,
-    temperature: f32,
-    prompt: &str,
-    thinking: RstructorThinkingLevel,
-) -> Result<CompletionResult, Box<dyn Error>> {
-    use rstructor::OpenAIClient;
-
-    let client = OpenAIClient::from_env()?
-        .model(model)
-        .temperature(temperature)
-        .thinking_level(thinking);
-
-    let result = client
-        .materialize_with_metadata::<CommitTemplate>(prompt)
-        .await
-        .map_err(|e| map_rstructor_error(e, model))?;
-
-    Ok(CompletionResult {
-        template: result.data,
-        usage: result.usage,
-    })
-}
-
-async fn complete_gemini(
-    model: &str,
-    temperature: f32,
-    prompt: &str,
-    thinking: RstructorThinkingLevel,
-) -> Result<CompletionResult, Box<dyn Error>> {
-    use rstructor::GeminiClient;
-
-    let client = GeminiClient::from_env()?
-        .model(model)
-        .temperature(temperature)
-        .thinking_level(thinking);
-
-    let result = client
-        .materialize_with_metadata::<CommitTemplate>(prompt)
-        .await
-        .map_err(|e| map_rstructor_error(e, model))?;
-
-    Ok(CompletionResult {
-        template: result.data,
-        usage: result.usage,
-    })
 }
 
 /// List available models for a provider
@@ -206,11 +180,22 @@ pub async fn list_models(provider: &str) -> Result<Vec<String>, Box<dyn Error>> 
     // Check provider is available
     check_available(provider)?;
 
-    // Execute the appropriate provider's list_models
-    let models = match provider.to_lowercase().as_str() {
-        "claude" => list_models_claude().await,
-        "openai" => list_models_openai().await,
-        "gemini" => list_models_gemini().await,
+    use rstructor::{AnthropicClient, GeminiClient, OpenAIClient};
+
+    macro_rules! list_with {
+        ($Client:ty) => {{
+            <$Client>::from_env()
+                .map_err(|e| Box::new(e) as Box<dyn Error>)?
+                .list_models()
+                .await
+                .map_err(|e| Box::new(e) as Box<dyn Error>)
+        }};
+    }
+
+    let models: Vec<ModelInfo> = match provider.to_lowercase().as_str() {
+        "claude" => list_with!(AnthropicClient),
+        "openai" => list_with!(OpenAIClient),
+        "gemini" => list_with!(GeminiClient),
         _ => Err(Box::new(AiError::ProviderNotFound {
             provider_name: provider.to_string(),
         }) as Box<dyn Error>),
@@ -220,57 +205,59 @@ pub async fn list_models(provider: &str) -> Result<Vec<String>, Box<dyn Error>> 
     Ok(models.into_iter().map(|m| m.id).collect())
 }
 
-async fn list_models_claude() -> Result<Vec<ModelInfo>, Box<dyn Error>> {
-    use rstructor::AnthropicClient;
-    let client = AnthropicClient::from_env()?;
-    client
-        .list_models()
-        .await
-        .map_err(|e| Box::new(e) as Box<dyn Error>)
-}
-
-async fn list_models_openai() -> Result<Vec<ModelInfo>, Box<dyn Error>> {
-    use rstructor::OpenAIClient;
-    let client = OpenAIClient::from_env()?;
-    client
-        .list_models()
-        .await
-        .map_err(|e| Box::new(e) as Box<dyn Error>)
-}
-
-async fn list_models_gemini() -> Result<Vec<ModelInfo>, Box<dyn Error>> {
-    use rstructor::GeminiClient;
-    let client = GeminiClient::from_env()?;
-    client
-        .list_models()
-        .await
-        .map_err(|e| Box::new(e) as Box<dyn Error>)
-}
-
-/// Map rstructor errors to our error types
-fn map_rstructor_error(err: rstructor::RStructorError, model: &str) -> Box<dyn Error> {
-    let err_str = err.to_string();
-
-    // Check for model not found errors
-    if err_str.contains("model")
-        && (err_str.contains("not exist")
-            || err_str.contains("not found")
-            || err_str.contains("does not exist"))
-    {
-        return Box::new(AiError::InvalidModel {
-            model: model.to_string(),
-        });
+/// Map a rstructor error to a typed, actionable [`AiError`].
+///
+/// Uses rstructor's classified [`ApiErrorKind`] rather than matching on the
+/// error's display string, so each real-world failure (bad key, unknown model,
+/// oversized request, rate limit, ...) produces a specific, useful message.
+fn map_rstructor_error(err: RStructorError, model: &str) -> AiError {
+    match &err {
+        RStructorError::Timeout => AiError::Timeout,
+        RStructorError::ApiError { provider, kind } => match kind {
+            ApiErrorKind::InvalidModel {
+                model: api_model,
+                suggestion,
+            } => AiError::InvalidModel {
+                // Prefer the model cmt actually sent if the API echoed something empty.
+                model: if api_model.is_empty() {
+                    model.to_string()
+                } else {
+                    api_model.clone()
+                },
+                suggestion: suggestion.clone(),
+            },
+            ApiErrorKind::AuthenticationFailed => AiError::Auth {
+                provider: provider.clone(),
+                message: format!(
+                    "API key is invalid, expired, or missing (set {})",
+                    api_key_env_var(provider)
+                ),
+            },
+            ApiErrorKind::PermissionDenied => AiError::Auth {
+                provider: provider.clone(),
+                message: "API key lacks permission for this model or operation".to_string(),
+            },
+            ApiErrorKind::RequestTooLarge => AiError::RequestTooLarge,
+            ApiErrorKind::RateLimited { .. } => AiError::RateLimited {
+                provider: provider.clone(),
+            },
+            ApiErrorKind::GatewayError { code } | ApiErrorKind::ServerError { code } => {
+                AiError::ApiError {
+                    code: *code,
+                    message: err.to_string(),
+                }
+            }
+            ApiErrorKind::Other { code, message } => AiError::ApiError {
+                code: *code,
+                message: message.clone(),
+            },
+            _ => AiError::ApiError {
+                code: 0,
+                message: err.to_string(),
+            },
+        },
+        _ => AiError::Other(err.to_string()),
     }
-
-    // Check for API errors
-    if err_str.contains("API") || err_str.contains("status") {
-        return Box::new(AiError::ApiError {
-            code: 0,
-            message: err_str,
-        });
-    }
-
-    Box::new(err)
 }
 
 // Error type for AI provider operations
@@ -288,8 +275,30 @@ pub enum AiError {
     #[error("API error: {code} {message}")]
     ApiError { code: u16, message: String },
 
-    #[error("Invalid model: {model}")]
-    InvalidModel { model: String },
+    #[error("Invalid model: {model}{}", .suggestion.as_ref().map(|s| format!(" (did you mean \"{s}\"?)")).unwrap_or_default())]
+    InvalidModel {
+        model: String,
+        suggestion: Option<String>,
+    },
+
+    #[error("Authentication failed for {provider}: {message}")]
+    Auth { provider: String, message: String },
+
+    #[error("Request too large: the diff is too big for the model. Try a smaller --max-file-lines, staging fewer files, or adding large files to .cmtignore")]
+    RequestTooLarge,
+
+    #[error(
+        "Rate limited by {provider}; the request was retried but kept failing. Try again shortly."
+    )]
+    RateLimited { provider: String },
+
+    #[error(
+        "Request timed out. Increase the limit with --timeout <secs> if the model is just slow."
+    )]
+    Timeout,
+
+    #[error("{0}")]
+    Other(String),
 }
 
 #[cfg(test)]
@@ -322,5 +331,73 @@ mod tests {
         assert_eq!(api_key_env_var("claude"), "ANTHROPIC_API_KEY");
         assert_eq!(api_key_env_var("openai"), "OPENAI_API_KEY");
         assert_eq!(api_key_env_var("gemini"), "GEMINI_API_KEY");
+    }
+
+    #[test]
+    fn test_normalize_thinking_claude_low_becomes_off() {
+        assert_eq!(
+            normalize_thinking("claude", ThinkingLevel::Low),
+            ThinkingLevel::Off
+        );
+        assert_eq!(
+            normalize_thinking("Claude", ThinkingLevel::High),
+            ThinkingLevel::High
+        );
+        // Other providers keep Low.
+        assert_eq!(
+            normalize_thinking("gemini", ThinkingLevel::Low),
+            ThinkingLevel::Low
+        );
+    }
+
+    #[test]
+    fn test_map_invalid_model_keeps_suggestion() {
+        let err = RStructorError::api_error(
+            "Gemini",
+            ApiErrorKind::InvalidModel {
+                model: "gemini-bogus".to_string(),
+                suggestion: Some("gemini-3.5-flash".to_string()),
+            },
+        );
+        match map_rstructor_error(err, "gemini-bogus") {
+            AiError::InvalidModel { model, suggestion } => {
+                assert_eq!(model, "gemini-bogus");
+                assert_eq!(suggestion.as_deref(), Some("gemini-3.5-flash"));
+            }
+            other => panic!("expected InvalidModel, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn test_map_classifies_auth_too_large_timeout() {
+        assert!(matches!(
+            map_rstructor_error(
+                RStructorError::api_error("OpenAI", ApiErrorKind::AuthenticationFailed),
+                "m"
+            ),
+            AiError::Auth { .. }
+        ));
+        assert!(matches!(
+            map_rstructor_error(
+                RStructorError::api_error("OpenAI", ApiErrorKind::RequestTooLarge),
+                "m"
+            ),
+            AiError::RequestTooLarge
+        ));
+        assert!(matches!(
+            map_rstructor_error(RStructorError::Timeout, "m"),
+            AiError::Timeout
+        ));
+    }
+
+    #[test]
+    fn test_invalid_model_message_includes_suggestion() {
+        let e = AiError::InvalidModel {
+            model: "foo".to_string(),
+            suggestion: Some("bar".to_string()),
+        };
+        let s = e.to_string();
+        assert!(s.contains("foo"), "message: {s}");
+        assert!(s.contains("bar"), "message: {s}");
     }
 }

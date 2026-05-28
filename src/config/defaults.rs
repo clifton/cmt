@@ -15,6 +15,7 @@ pub const CMTIGNORE_FILENAME: &str = ".cmtignore";
 // AI provider defaults
 pub const DEFAULT_PROVIDER: &str = "gemini";
 pub const DEFAULT_THINKING: &str = "low"; // Reasoning depth: none, minimal, low, high
+pub const TIMEOUT_SECS: u64 = 60; // Per-request timeout (seconds) for the LLM call
 
 // Git defaults
 pub const INCLUDE_RECENT_COMMITS: bool = true;
@@ -60,6 +61,7 @@ provider = "{}"  # Options: {}
 # model = "{}"  # Uncomment to set a specific model
 # temperature = 0.3  # Uncomment to set a specific temperature
 thinking = "{}"  # Reasoning depth: none, minimal, low, high
+timeout = {}  # Per-request timeout in seconds for the LLM call
 
 # Git options
 include_recent_commits = {}
@@ -82,6 +84,7 @@ recent_commits_count = {}
         AVAILABLE_PROVIDERS.join(", "),
         DEFAULT_CLAUDE_MODEL,
         DEFAULT_THINKING,
+        TIMEOUT_SECS,
         INCLUDE_RECENT_COMMITS,
         RECENT_COMMITS_COUNT,
         DEFAULT_TEMPLATE,

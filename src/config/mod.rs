@@ -58,6 +58,7 @@ pub struct Config {
     pub model: Option<String>,
     pub temperature: Option<f32>,
     pub thinking: String,
+    pub timeout_secs: u64,
 
     // Git options
     pub include_recent_commits: bool,
@@ -84,6 +85,7 @@ impl Default for Config {
             model: None,
             temperature: None,
             thinking: defaults::DEFAULT_THINKING.to_string(),
+            timeout_secs: defaults::TIMEOUT_SECS,
             include_recent_commits: defaults::INCLUDE_RECENT_COMMITS,
             recent_commits_count: defaults::RECENT_COMMITS_COUNT,
             template: None,
@@ -177,6 +179,9 @@ impl Config {
         if other.thinking != defaults::DEFAULT_THINKING {
             self.thinking = other.thinking.clone();
         }
+        if other.timeout_secs != defaults::TIMEOUT_SECS {
+            self.timeout_secs = other.timeout_secs;
+        }
         if other.include_recent_commits != defaults::INCLUDE_RECENT_COMMITS {
             self.include_recent_commits = other.include_recent_commits;
         }
@@ -205,6 +210,7 @@ impl Config {
             model: args.model.clone(),
             temperature: args.temperature,
             thinking: args.thinking.clone(),
+            timeout_secs: args.timeout,
             include_recent_commits: !args.no_recent_commits,
             recent_commits_count: args.recent_commits_count,
             template: args.template.clone(),

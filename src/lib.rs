@@ -148,14 +148,8 @@ pub async fn generate_commit_message(
 
     // Generate the commit message
     let temperature = config.temperature.unwrap_or(ai::DEFAULT_TEMPERATURE);
-
-    // Parse thinking level (default to Off for Claude due to max_tokens/budget_tokens issue)
-    let thinking_level = if provider_name == "claude" && config.thinking == "low" {
-        // Claude's default should be Off until rstructor handles max_tokens properly
-        Some(ai::ThinkingLevel::Off)
-    } else {
-        Some(ai::ThinkingLevel::parse(&config.thinking))
-    };
+    // Provider-specific thinking quirks are normalized inside complete_structured.
+    let thinking_level = Some(ai::ThinkingLevel::parse(&config.thinking));
 
     // Try to complete the prompt with structured output
     let completion = match ai::complete_structured(
@@ -165,13 +159,15 @@ pub async fn generate_commit_message(
         &system_prompt,
         &prompt,
         thinking_level,
+        config.timeout_secs,
     )
     .await
     {
         Ok(result) => result,
         Err(err) => {
             // Check for invalid model error
-            if let Some(ai::AiError::InvalidModel { model }) = err.downcast_ref::<ai::AiError>() {
+            if let Some(ai::AiError::InvalidModel { model, .. }) = err.downcast_ref::<ai::AiError>()
+            {
                 return Err(format!(
                     "Invalid model: {} for provider: {}\nCheck the provider's documentation for available models.",
                     model,

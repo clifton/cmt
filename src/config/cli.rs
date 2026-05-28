@@ -107,6 +107,10 @@ pub struct Args {
     /// Reasoning depth for AI models (none=fastest, minimal, low, high)
     #[arg(long, default_value = "low", value_parser = ["none", "minimal", "low", "high"])]
     pub thinking: String,
+
+    /// Per-request timeout in seconds for the LLM call
+    #[arg(long, default_value_t = crate::config::defaults::TIMEOUT_SECS)]
+    pub timeout: u64,
 }
 
 impl Args {

@@ -93,19 +93,30 @@ pub fn simple_template() -> String {
         .to_string()
 }
 
-/// Conventional commits template (triple braces to avoid HTML escaping)
+/// Conventional commits template (triple braces to avoid HTML escaping).
+///
+/// Renders the `issues` and `breaking` footers and the `!` breaking marker so
+/// the default template never silently drops fields the model populated.
 pub fn conventional_template() -> String {
-    r#"{{type}}{{#if scope}}({{{scope}}}){{/if}}: {{{subject}}}
+    r#"{{type}}{{#if scope}}({{{scope}}}){{/if}}{{#if breaking}}!{{/if}}: {{{subject}}}
 
 {{#if details}}
 {{{details}}}
+{{/if}}
+
+{{#if issues}}
+Fixes: {{{issues}}}
+{{/if}}
+
+{{#if breaking}}
+BREAKING CHANGE: {{{breaking}}}
 {{/if}}"#
         .to_string()
 }
 
 /// Detailed template (triple braces to avoid HTML escaping)
 pub fn detailed_template() -> String {
-    r#"{{type}}{{#if scope}}({{{scope}}}){{/if}}: {{{subject}}}
+    r#"{{type}}{{#if scope}}({{{scope}}}){{/if}}{{#if breaking}}!{{/if}}: {{{subject}}}
 
 {{#if details}}
 {{{details}}}

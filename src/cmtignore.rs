@@ -62,68 +62,79 @@ pub fn append_to_cmtignore(repo_root: &Path, files: &[String]) -> io::Result<()>
     Ok(())
 }
 
-/// Check if a file path matches a .cmtignore pattern
+/// Check if a file path matches a .cmtignore pattern.
 ///
-/// Supports simple glob patterns:
-/// - `*` matches any sequence of characters (except `/`)
-/// - `**` matches any sequence of characters (including `/`)
-/// - Exact matches work as expected
+/// Patterns are matched component-by-component (split on `/`):
+/// - `*` matches any run of characters within a single path component (not `/`)
+/// - `?` matches any single character within a component
+/// - `**` matches zero or more whole path components (any depth)
+/// - everything else is a literal match
+///
+/// This supports multiple wildcards in one pattern (e.g. `src/*/*.rs`,
+/// `**/*.test.tsx`) and anchors `**` on component boundaries, so `**/foo.tsx`
+/// matches `a/b/foo.tsx` but not `barfoo.tsx`.
 pub fn matches_pattern(path: &str, pattern: &str) -> bool {
-    // Normalize path separators
     let path = path.replace('\\', "/");
     let pattern = pattern.replace('\\', "/");
 
-    // Handle ** glob (matches any path depth)
-    if pattern.contains("**") {
-        let parts: Vec<&str> = pattern.split("**").collect();
-        if parts.len() == 2 {
-            let prefix = parts[0];
-            let suffix = parts[1].trim_start_matches('/');
+    let pat: Vec<&str> = pattern.split('/').collect();
+    let segs: Vec<&str> = path.split('/').collect();
+    match_components(&pat, &segs)
+}
 
-            // Check if path starts with prefix (if any) and ends with suffix (if any)
-            let matches_prefix = prefix.is_empty() || path.starts_with(prefix);
-
-            // For suffix, we need to handle patterns like "*.tsx" - match against filename
-            let matches_suffix = if suffix.is_empty() {
-                true
-            } else if let Some(ext_pattern) = suffix.strip_prefix('*') {
-                // Suffix like "*.tsx" - check if any path component matches
-                // ext_pattern is e.g., ".tsx"
-                path.ends_with(ext_pattern)
+/// Match pattern components against path components. A `**` component matches
+/// zero or more path components; any other component is matched against a single
+/// path component via [`segment_match`].
+fn match_components(pat: &[&str], path: &[&str]) -> bool {
+    match pat.split_first() {
+        None => path.is_empty(),
+        Some((&first, rest)) => {
+            if first == "**" {
+                // Try consuming 0..=path.len() leading components.
+                (0..=path.len()).any(|i| match_components(rest, &path[i..]))
             } else {
-                path.ends_with(suffix)
-            };
-
-            return matches_prefix && matches_suffix;
-        }
-    }
-
-    // Handle * glob (matches within single path component)
-    if pattern.contains('*') {
-        let parts: Vec<&str> = pattern.split('*').collect();
-        if parts.len() == 2 {
-            let prefix = parts[0];
-            let suffix = parts[1];
-
-            // For single *, don't match across directory separators
-            let matches_prefix = path.starts_with(prefix);
-            let matches_suffix = path.ends_with(suffix);
-
-            if matches_prefix && matches_suffix {
-                // Check that the middle part doesn't contain /
-                let middle_start = prefix.len();
-                let middle_end = path.len().saturating_sub(suffix.len());
-                if middle_start <= middle_end {
-                    let middle = &path[middle_start..middle_end];
-                    return !middle.contains('/');
+                match path.split_first() {
+                    Some((&head, tail)) if segment_match(first, head) => {
+                        match_components(rest, tail)
+                    }
+                    _ => false,
                 }
             }
+        }
+    }
+}
+
+/// Glob-match a single path component: `*` matches any run of characters and `?`
+/// matches exactly one (neither crosses `/`, since components contain none).
+fn segment_match(pattern: &str, text: &str) -> bool {
+    let pat: Vec<char> = pattern.chars().collect();
+    let txt: Vec<char> = text.chars().collect();
+    let (mut pi, mut ti) = (0usize, 0usize);
+    let (mut star_pi, mut star_ti): (Option<usize>, usize) = (None, 0);
+
+    while ti < txt.len() {
+        if pi < pat.len() && (pat[pi] == '?' || pat[pi] == txt[ti]) {
+            pi += 1;
+            ti += 1;
+        } else if pi < pat.len() && pat[pi] == '*' {
+            // Record a backtracking point: `*` matches zero chars for now.
+            star_pi = Some(pi);
+            star_ti = ti;
+            pi += 1;
+        } else if let Some(sp) = star_pi {
+            // Backtrack: let the last `*` consume one more character.
+            pi = sp + 1;
+            star_ti += 1;
+            ti = star_ti;
+        } else {
             return false;
         }
     }
-
-    // Exact match
-    path == pattern
+    // Trailing `*`s match the empty string.
+    while pi < pat.len() && pat[pi] == '*' {
+        pi += 1;
+    }
+    pi == pat.len()
 }
 
 #[cfg(test)]
@@ -215,5 +226,30 @@ mod tests {
 
         assert!(matches_pattern("src/components/Button.tsx", "**/*.tsx"));
         assert!(matches_pattern("Button.tsx", "**/*.tsx"));
+    }
+
+    #[test]
+    fn test_matches_pattern_multiple_wildcards() {
+        // Patterns with 2+ wildcards previously fell through to exact match and
+        // silently matched nothing.
+        assert!(matches_pattern("src/a/file.rs", "src/*/*.rs"));
+        assert!(matches_pattern(
+            "src/components/Button.test.tsx",
+            "**/*.test.tsx"
+        ));
+        assert!(matches_pattern("a/b/c/d.rs", "a/**/d.rs"));
+        // `*` must not cross a directory separator.
+        assert!(!matches_pattern("src/a/b/file.rs", "src/*/*.rs"));
+    }
+
+    #[test]
+    fn test_matches_pattern_respects_component_boundaries() {
+        // `**/foo.tsx` must match on a component boundary, not a raw suffix.
+        assert!(matches_pattern("a/b/foo.tsx", "**/foo.tsx"));
+        assert!(matches_pattern("foo.tsx", "**/foo.tsx"));
+        assert!(!matches_pattern("barfoo.tsx", "**/foo.tsx"));
+        // A literal prefix must align with a component boundary too.
+        assert!(matches_pattern("src/x/y.tsx", "src/**/*.tsx"));
+        assert!(!matches_pattern("src-gen/y.tsx", "src/**/*.tsx"));
     }
 }
